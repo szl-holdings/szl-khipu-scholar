@@ -1,0 +1,17 @@
+SZL Khipu Scholar
+Copyright 2026 SZL Holdings
+
+This product includes software developed by SZL Holdings
+(https://github.com/szl-holdings).
+
+This product builds on the Open Khipu Repository (OKR), used under the MIT
+License. 619 khipus / 54,403 cords / 110,677 knots of structural data derive
+from OKR khipu_main.
+
+The text corpus contains only open-access scholarship; each document is
+sha256-pinned in the manifest. Copyrighted monographs are catalogued in
+metadata only and are NEVER included as training data. The ALBA attribution
+is carried as a disputed label in the data.
+
+"SZL", "a-11-oy.com" and "a11oy.net" are marks of SZL Holdings. Apache-2.0
+redistribution requires attribution; see LICENSE.
