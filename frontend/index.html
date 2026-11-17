@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Khipu Scholar Explorer - SZL Holdings</title>
+<style>
+  :root { --ink:#111; --paper:#faf7f0; --knot:#8a4b08; --ok:#0a6b2d; --obs:#9a6b00; }
+  * { box-sizing:border-box; }
+  body { font-family:Georgia,'Times New Roman',serif; margin:0; background:var(--paper); color:var(--ink); }
+  header { padding:2rem 1.5rem; border-bottom:3px double #c9b99a; }
+  header h1 { margin:0 0 .3rem; font-size:1.6rem; }
+  header p { margin:0; color:#555; }
+  main { max-width:880px; margin:0 auto; padding:1.5rem; }
+  section { margin:2rem 0; }
+  h2 { font-size:1.1rem; border-bottom:1px solid #ddd; padding-bottom:.3rem; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.8rem; }
+  .card { background:#fff; border:1px solid #e2d9c6; border-radius:6px; padding:.9rem; }
+  .card b { display:block; font-size:1.3rem; color:var(--knot); }
+  .note { background:#fff; border-left:4px solid var(--knot); padding:.7rem 1rem; margin:.6rem 0; }
+  table { width:100%; border-collapse:collapse; background:#fff; font-family:ui-monospace,monospace; font-size:.78rem; }
+  th,td { text-align:left; padding:.35rem .5rem; border-bottom:1px solid #eee; }
+  .AUTHORIZED { color:var(--ok); font-weight:bold; }
+  .OBSERVED { color:var(--obs); }
+  footer { text-align:center; color:#777; font-size:.8rem; padding:2rem; border-top:3px double #c9b99a; }
+  a { color:var(--knot); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Khipu Scholar Explorer</h1>
+  <p>SZL Holdings - knot the corpus. Sign the run. Fail closed. Apache-2.0.</p>
+</header>
+<main>
+  <section>
+    <h2>Data census (Open Khipu Repository, MIT)</h2>
+    <div class="cards">
+      <div class="card"><b>770</b>QA rows</div>
+      <div class="card"><b>619</b>khipus</div>
+      <div class="card"><b>54,403</b>cords</div>
+      <div class="card"><b>110,677</b>knots</div>
+      <div class="card"><b>42</b>OA corpus docs (sha256-pinned)</div>
+    </div>
+    <div class="note">Copyrighted monographs are catalogued, never trained. The ALBA attribution is carried as a disputed label. No decipherment claims are made.</div>
+  </section>
+
+  <section>
+    <h2>Signed receipts</h2>
+    <div id="receipts-note" class="note">Loading receipt feed...</div>
+    <table id="receipts" style="display:none">
+      <thead><tr><th>receipt</th><th>node</th><th>type</th><th>verdict</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Adapter models</h2>
+    <div class="cards">
+      <div class="card"><b>scholar-v1</b>Qwen3-1.7B LoRA<br><a href="https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-v1">HF repo</a></div>
+      <div class="card"><b>scholar-4b</b>Qwen3-4B LoRA<br><a href="https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-4b-v1">HF repo</a></div>
+      <div class="card"><b>structure-v1</b>Qwen3-1.7B LoRA<br><a href="https://huggingface.co/SZLHOLDINGS/salad-khipu-structure-v1">HF repo</a></div>
+    </div>
+    <div class="note">Status: TRAINING. The canonical record of every boot, crash, state and completion is the DSSE-signed receipt in
+      <a href="https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholar-runs">SZLHOLDINGS/khipu-scholar-runs</a>.</div>
+  </section>
+</main>
+<footer>Khipu Scholar Explorer - part of the SZL governed-AI estate - <a href="https://github.com/szl-holdings/szl-khipu-scholar">source</a></footer>
+<script>
+(async () => {
+  const note = document.getElementById('receipts-note');
+  const table = document.getElementById('receipts');
+  const api = new URLSearchParams(location.search).get('api');
+  if (!api) { note.textContent = 'Receipts feed: launch server/app.py and pass ?api=http://127.0.0.1:8787 to view live signed receipts.'; return; }
+  try {
+    const r = await fetch(api + '/receipts');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const tb = table.querySelector('tbody');
+    tb.innerHTML = (d.receipts || []).map(x =>
+      '<tr><td>' + x.file + '</td><td>' + (x.node || '') + '</td><td>' + (x.type || '') +
+      '</td><td class="' + (x.verdict || 'OBSERVED') + '">' + x.verdict + '</td></tr>').join('');
+    table.style.display = '';
+    note.textContent = 'Live feed: ' + d.count + ' receipts from ' + d.repo + '. Verdicts computed client-displayed, verified server-side.';
+  } catch (e) {
+    note.textContent = 'Receipts feed unavailable (' + e.message + '). Fail closed: showing nothing rather than unverified data.';
+  }
+})();
+</script>
+</body>
+</html>

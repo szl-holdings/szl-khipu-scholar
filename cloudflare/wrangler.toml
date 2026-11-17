@@ -1,0 +1,12 @@
+# Khipu Scholar - Cloudflare wiring (STAGED; owner-gated deployment)
+# Front end: Cloudflare Pages from ./frontend (static, no build step)
+# Back end: run server/app.py on your infra (e.g. the estate's edge) and
+# point Pages functions or a Worker at it. Do not ship HF_TOKEN into any
+# public asset. DNS and billing onboarding are owner-gated estate items.
+
+name = "khipu-scholar-api-proxy"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+KHIPU_API_ORIGIN = "http://127.0.0.1:8787"
