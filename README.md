@@ -23,6 +23,7 @@ Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github
 - **Copyrighted monographs are catalogued, never trained on.** Only open-access work under permissive terms enters the corpus; each document is sha256-pinned.
 - **The ALBA claim is labeled disputed in the data.** Disputed attributions are carried as labels, not as ground truth.
 - **Training losses and wall-hours are receipt-bound.** The canonical record is the signed receipt, not marketing copy.
+- **Integrity is not source accuracy or model quality.** QA schema/count checks do not verify archaeological facts or held-out performance. The sibling arithmetic corpus is a separate, partial projection, not a complete physical description. See [data and validation boundaries](docs/CORPUS_DOCTRINE.md#data-and-validation-boundaries).
 
 ## Why it matters (for investors)
 
