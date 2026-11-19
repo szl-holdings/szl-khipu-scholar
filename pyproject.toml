@@ -19,6 +19,7 @@ classifiers = [
 
 [project.optional-dependencies]
 verify = ["szl-mesh>=0.1.0", "pynacl>=1.5", "huggingface_hub>=0.30"]
+tlog = ["pynacl>=1.5"]
 server = ["fastapi>=0.110", "uvicorn>=0.29", "huggingface_hub>=0.30", "pynacl>=1.5"]
 
 [project.urls]
