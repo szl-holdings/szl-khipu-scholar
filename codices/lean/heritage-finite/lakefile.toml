@@ -1,0 +1,8 @@
+name = "HeritageFinite"
+version = "0.1.0"
+leanVersion = "4.35.0"
+defaultTargets = ["HeritageFinite"]
+
+[[lean_lib]]
+name = "HeritageFinite"
+roots = ["HeritageFinite"]
