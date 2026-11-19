@@ -34,7 +34,7 @@ Honesty constraints: TRANSFER PROBE ONLY. Not a decipherment claim, not evidence
 
 1. Admit source (license verified, sha256 pinned, provenance card committed via PR).
 2. Extract structure (tables, worked problems, numerals) into a QA dataset.
-3. LoRA train under DSSE-signed, tamper-evident receipts (Salad GPU lanes).
+3. LoRA train under signed training receipts (Salad GPU lanes); see `docs/RECEIPTS.md` for what verification establishes.
 4. Held-out eval with signed receipts; honest metrics; no decipherment claims.
 
 ## Field leaders - upgrade mapping (2026-11-19)
@@ -43,7 +43,7 @@ A "zoom out" review of who currently leads each field this lane touches, and how
 
 | Field | Current leaders | Estate position (2026-11-19) | Upgrade decision |
 |---|---|---|---|
-| Model supply chain / provenance | [Sigstore model-signing (CoSAI)](https://github.com/sigstore/model-signing); [CycloneDX 1.7 ML-BOM](https://cyclonedx.org); OWASP AIBOM; SPDX 3.0; CISA AI-in-OT principles | DSSE-signed run receipts everywhere; CycloneDX 1.7 ML-BOMs now live next to both released adapters (`bom/ml-bom.json` in salad-khipu-scholar-v1 and salad-khipu-structure-v1), built exclusively from receipt-verified values | Next provenance gate: a sigstore model-signing pass on released adapters (leaders sign the weights themselves; today we sign the receipts) |
+| Model supply chain / provenance | [Sigstore model-signing (CoSAI)](https://github.com/sigstore/model-signing); [CycloneDX 1.7 ML-BOM](https://cyclonedx.org); OWASP AIBOM; SPDX 3.0; CISA AI-in-OT principles | Signed run receipts (plain signed JSON with per-boot lane keys, not yet pinned or endorsed; liveness beacons are DSSE); CycloneDX 1.7 ML-BOMs now live next to both released adapters (`bom/ml-bom.json` in salad-khipu-scholar-v1 and salad-khipu-structure-v1), built from values in the training receipts, which are checked only against the keys they carry | Next provenance gate: a sigstore model-signing pass on released adapters (leaders sign the weights themselves; today we sign the receipts) |
 | Fine-tuning throughput | [Unsloth](https://github.com/unslothai/unsloth) over Axolotl/TRL/LLaMA-Factory ([Jul 2026 comparison](https://www.marktechpost.com/2026/07/22/unsloth-vs-axolotl-vs-trl-vs-llama-factory-a-fine-tuning-framework-comparison-on-speed-vram-and-multi-gpu/)) | Current lanes train with TRL LoRA on Salad GPU | Adopt Unsloth for the *next* training lane only; never rewire a lane mid-run |
 | Corpus khipu studies | [Metrological Domain Profiling IV](https://works.hcommons.org/records/2d7r8-26m93) (entropy-based classification over the full Open Khipu Repository; three administrative systems) | Our structure-v1 lane targets a different, honest objective: cipher reconstruction on held-out cords (cipher_exact_match 0.9113, n=282, signed receipt 2026-11-19) | Cite as field context in structure-lane docs; no decipherment claims either way |
 

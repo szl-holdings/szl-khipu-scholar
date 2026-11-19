@@ -2,7 +2,7 @@
 
 **Knot the corpus. Sign the run. Fail closed.**
 
-Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github.com/szl-holdings) governed-AI estate: a provenance-first corpus of open-access khipu research, a QA dataset generated from the MIT-licensed Open Khipu Repository (OKR), and LoRA adapters trained in public under DSSE-signed, tamper-evident receipts.
+Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github.com/szl-holdings) governed-AI estate: a provenance-first corpus of open-access khipu research, a QA dataset generated from the MIT-licensed Open Khipu Repository (OKR), and LoRA adapters whose training events are published as signed receipts ([what verification establishes](docs/RECEIPTS.md#what-verification-establishes)).
 
 **Artifact:** Python package + receipts API + explorer front end · **License:** Apache-2.0 · **Doctrine:** v11
 
@@ -11,9 +11,9 @@ Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github
 | Layer | Status | Evidence |
 |---|---|---|
 | Corpus (42 open-access docs, sha256 hash-pinned) | LIVE | [SZLHOLDINGS/khipu-scholars-corpus-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholars-corpus-v1) |
-| QA dataset (770 rows from OKR khipu_main: 619 khipus / 54,403 cords / 110,677 knots) | LIVE | [SZLHOLDINGS/khipu-scholars-sft-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholars-sft-v1) |
-| LoRA adapters (Qwen3-1.7B / 4B) | scholar-v1 RELEASED (final loss 0.0085, 2,000 steps, 9.45 GPU-hours, DSSE receipted); structure-v1 RELEASED + EVAL (loss 0.0360, 2,000 steps, 25.62 GPU-hours; held-out cipher_exact_match 0.9113 over 343 rows, n=282, DSSE receipted); 4B TRAINING (restarted 2026-11-19, honest ETA ~2026-11-20) | [salad-khipu-scholar-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-v1) · [salad-khipu-scholar-4b-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-4b-v1) · [salad-khipu-structure-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-structure-v1) |
-| Signed receipts (boot / crash / state / complete) | LIVE | [SZLHOLDINGS/khipu-scholar-runs](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholar-runs) |
+| SFT dataset (770 rows: 516 corpus-text, 250 OKR-derived QA, 4 doctrine, per its `sft_manifest.json`; OKR khipu_main holds 619 khipus / 54,403 cords / 110,677 knots) | LIVE | [SZLHOLDINGS/khipu-scholars-sft-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholars-sft-v1) |
+| LoRA adapters (Qwen3-1.7B / 4B) | scholar-v1 RELEASED (final loss 0.0085, 2,000 steps, 9.45 GPU-hours, signed receipt); structure-v1 RELEASED + EVAL (loss 0.0360, 2,000 steps, 25.62 GPU-hours; held-out cipher_exact_match 0.9113 over 343 rows, n=282, signed receipt); 4B TRAINING (restarted 2026-11-19, honest ETA ~2026-11-20) | [salad-khipu-scholar-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-v1) · [salad-khipu-scholar-4b-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-4b-v1) · [salad-khipu-structure-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-structure-v1) |
+| Signed receipts (boot / crash / state / complete; per-boot lane keys, none pinned yet, so none AUTHORIZED) | LIVE | [SZLHOLDINGS/khipu-scholar-runs](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholar-runs) |
 | Mesh liveness beacons (cross-verified DSSE) | LIVE | [SZLHOLDINGS/mesh-liveness](https://huggingface.co/datasets/SZLHOLDINGS/mesh-liveness) |
 | Receipts library (szl-mesh on PyPI) | LIVE | [pypi.org/project/szl-mesh](https://pypi.org/project/szl-mesh/) |
 
@@ -27,7 +27,7 @@ Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github
 
 ## Why it matters (for investors)
 
-Every autonomous or model-assisted step in this product line signs its work: training boots, crashes, state transitions, and completions are DSSE-signed records a third party can verify. That is the estate's core thesis - **AI that signs its work** - applied to a real scholarly domain (Andean khipu studies) with licensing discipline as a first-class feature.
+Every autonomous or model-assisted step in this product line signs its work: training boots, crashes, state transitions, and completions are signed records. Until a lane key is pinned, a valid signature shows only that a receipt was signed by the key it carries: anyone able to write a receipt could re-sign altered content and it would verify the same way. Each lane generates a fresh key at boot, and no lane key is endorsed or pinned yet (see [docs/RECEIPTS.md](docs/RECEIPTS.md)). Endorsing lane keys is ROADMAP. That is the estate's core thesis - **AI that signs its work** - applied to a real scholarly domain (Andean khipu studies) with licensing discipline as a first-class feature.
 
 Monetization path (staged, owner-gated): metered inference through the estate's x402 pattern ([szl-inference-gateway](https://github.com/szl-holdings/szl-inference-gateway)), a receipts-verification API service, and corpus/QA tooling. Cloudflare deployment wiring is staged under `cloudflare/`.
 
@@ -40,7 +40,7 @@ pip install -e ".[verify]"
 ```
 
 ```python
-from szl_khipu_scholar.receipts import verify_receipt_file   # DSSE-verify any mesh receipt
+from szl_khipu_scholar.receipts import verify_receipt_file   # verify a mesh receipt against pinned lane keys
 from szl_khipu_scholar.corpus import load_manifest, verify_manifest  # sha256 corpus pinning
 from szl_khipu_scholar.qa import load_qa, validate_row  # OKR-derived QA rows
 ```
