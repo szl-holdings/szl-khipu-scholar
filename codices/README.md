@@ -12,6 +12,12 @@ Every agrarian bureaucracy, temple school, and royal library that left us mathem
 - **No decipherment claims** for any undeciphered script or open scholarly question, anywhere in this lane.
 - Receipts live with the run: corpus cards are committed like code, via PR.
 
+## Heritage-transfer eval - 2026-11-19
+
+Adapters trained on khipu data are probed for bounded-arithmetic transfer on adjacent ancient-math formulations. Dataset: [SZLHOLDINGS/khipu-heritage-eval-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-heritage-eval-v1) (private), 47 ground-truthed rows: 16 Egyptian repeated-doubling products, 12 two-term unit-fraction decompositions 2/n, 9 sexagesimal conversions (incl. YBC 7289 1;24,51,10 = 30547/21600), 5 Maya calendar-round LCM rows, 5 decimal place-value controls. Every identity backing a gold answer is machine-checked in `codices/lean/heritage-finite` (Lean 4.35 core, lake-verified).
+
+Honesty constraints: TRANSFER PROBE ONLY. Not a decipherment claim, not evidence about ancient scribes, not a heritage benchmark. Metric: exact match on completions. Results (when the eval lane runs) go to SZLHOLDINGS/khipu-scholar-runs with signed receipts.
+
 ## Seed manifest - 2026-11-19
 
 | Source | Civilization | Status | Notes |
