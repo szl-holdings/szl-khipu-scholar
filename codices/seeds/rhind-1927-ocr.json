@@ -1,0 +1,13 @@
+{
+  "artifact": "rhind-1927-ocr",
+  "lane": "szl-codices",
+  "source": "Internet Archive item TheRhindPapyrusVolume1 (1927, Peet facsimile/transcription/translation)",
+  "url": "https://archive.org/download/TheRhindPapyrusVolume1/The_Rhind_Papyrus_Volume_1_djvu.txt",
+  "license_status": "Public Domain Mark 1.0 per IA item metadata, verified 2026-11-19",
+  "bytes": 535229,
+  "sha256": "914ad617e0fac06b",
+  "date_admitted": "2026-11-19",
+  "gate": "ADMITTED_OPEN_ACCESS",
+  "holding": "machine-local (C:/SZL/codices) pending SZLHOLDINGS HF corpus dataset",
+  "doctrine": "catalogued-never-copied applies to all non-admitted sources"
+}
