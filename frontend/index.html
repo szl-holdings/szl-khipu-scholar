@@ -48,7 +48,7 @@
     <h2>Signed receipts</h2>
     <div id="receipts-note" class="note">Loading receipt feed...</div>
     <table id="receipts" style="display:none">
-      <thead><tr><th>receipt</th><th>node</th><th>type</th><th>verdict</th></tr></thead>
+      <thead><tr><th>receipt</th><th>node</th><th>type</th><th>signature</th><th>key</th><th>verdict</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -60,7 +60,7 @@
       <div class="card"><b>scholar-4b</b>Qwen3-4B LoRA<br><a href="https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-4b-v1">HF repo</a></div>
       <div class="card"><b>structure-v1</b>Qwen3-1.7B LoRA<br><a href="https://huggingface.co/SZLHOLDINGS/salad-khipu-structure-v1">HF repo</a></div>
     </div>
-    <div class="note">Status: TRAINING. The canonical record of every boot, crash, state and completion is the DSSE-signed receipt in
+    <div class="note">Status: TRAINING. The canonical record of every boot, crash, state and completion is the signed receipt in
       <a href="https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholar-runs">SZLHOLDINGS/khipu-scholar-runs</a>.</div>
   </section>
 </main>
@@ -76,11 +76,23 @@
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     const tb = table.querySelector('tbody');
-    tb.innerHTML = (d.receipts || []).map(x =>
-      '<tr><td>' + x.file + '</td><td>' + (x.node || '') + '</td><td>' + (x.type || '') +
-      '</td><td class="' + (x.verdict || 'OBSERVED') + '">' + x.verdict + '</td></tr>').join('');
+    // Receipt fields come from files anyone with write access to the runs repo can
+    // author, so they are rendered as text, never as markup.
+    tb.replaceChildren(...(d.receipts || []).map(x => {
+      const tr = document.createElement('tr');
+      const verdict = x.verdict === 'AUTHORIZED' ? 'AUTHORIZED' : 'OBSERVED';
+      [x.file, x.node, x.type, x.signature, x.key_state, verdict].forEach((value, i) => {
+        const td = document.createElement('td');
+        td.textContent = value == null ? '' : String(value);
+        if (i === 5) td.className = verdict;
+        tr.appendChild(td);
+      });
+      return tr;
+    }));
     table.style.display = '';
-    note.textContent = 'Live feed: ' + d.count + ' receipts from ' + d.repo + '. Verdicts computed client-displayed, verified server-side.';
+    const pinned = d.trust_root && d.trust_root.state === 'LOADED' ? d.trust_root.pinned_nodes : 0;
+    note.textContent = 'Live feed: ' + d.count + ' receipts from ' + d.repo + '. Verified server-side against ' +
+      pinned + ' pinned lane(s). AUTHORIZED means signed by a pinned lane key; a receipt that only matches the key it carries is OBSERVED.';
   } catch (e) {
     note.textContent = 'Receipts feed unavailable (' + e.message + '). Fail closed: showing nothing rather than unverified data.';
   }

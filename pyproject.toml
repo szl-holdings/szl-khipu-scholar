@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "szl-khipu-scholar"
 version = "0.1.0"
-description = "Provenance-first khipu corpus, OKR-derived QA dataset, and DSSE receipt verification for the SZL governed-AI estate"
+description = "Provenance-first khipu corpus, OKR-derived QA dataset, and signed-receipt verification for the SZL governed-AI estate"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-verify = ["szl-mesh>=0.1.0", "huggingface_hub>=0.30"]
+verify = ["szl-mesh>=0.1.0", "pynacl>=1.5", "huggingface_hub>=0.30"]
 server = ["fastapi>=0.110", "uvicorn>=0.29", "huggingface_hub>=0.30"]
 
 [project.urls]
@@ -28,3 +28,6 @@ Documentation = "https://github.com/szl-holdings/szl-khipu-scholar/tree/main/doc
 
 [tool.setuptools.packages.find]
 include = ["szl_khipu_scholar*"]
+
+[tool.setuptools.package-data]
+szl_khipu_scholar = ["trust/*.json"]

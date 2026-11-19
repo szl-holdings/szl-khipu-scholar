@@ -1,7 +1,8 @@
 """szl-khipu-scholar: provenance-first khipu corpus tooling and receipt verification.
 
-Part of the SZL Holdings governed-AI estate. Fail closed: unsigned receipts
-are OBSERVED, never AUTHORIZED; hash mismatches are failures, never warnings.
+Part of the SZL Holdings governed-AI estate. Fail closed: a receipt is AUTHORIZED
+only against a pinned lane key; unsigned or self-keyed receipts are OBSERVED.
+Hash mismatches are failures, never warnings.
 """
 __version__ = "0.1.0"
 

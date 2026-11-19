@@ -7,7 +7,7 @@
 - **ALBA attribution**: carried with a `disputed=true` label wherever it appears. Disputed is a label, not a verdict.
 
 ## Receipts as the canonical record
-Any loss, step count, or wall-hour figure outside a DSSE-signed receipt is non-canonical marketing copy. The signed receipt chain (boot, crash, state, complete) in the runs repository is the only accepted record.
+Any loss, step count, or wall-hour figure outside a signed receipt is non-canonical marketing copy. The signed receipt chain (boot, crash, state, complete) in the runs repository is the only accepted record.
 
 ## Claims discipline
 - No decipherment claims. The adapters are structure and scholar auxiliary models.

@@ -4,8 +4,9 @@ FastAPI app serving the signed-receipt feed and corpus census.
 Fail-closed by design:
 - If HF_TOKEN is absent and a repository is private, endpoints return an
   honest error, never fabricated data.
-- Receipt verdicts are computed, not asserted: an unsigned or unverified
-  receipt is OBSERVED, never AUTHORIZED.
+- Receipt verdicts are computed, not asserted: a receipt is AUTHORIZED only
+  when its signature verifies against a lane key pinned in the trust root.
+  A receipt that only verifies against the key it carries is OBSERVED.
 
 Run: uvicorn server.app:app --host 127.0.0.1 --port 8787
 """
@@ -52,19 +53,28 @@ def receipts() -> Dict[str, Any]:
                        if f.startswith("mesh/") and f.endswith(".json"))
     except Exception as e:
         raise HTTPException(status_code=503, detail="runs repo unreadable: " + repr(e)[:200])
-    from szl_khipu_scholar.receipts import verify_receipt_dict
+    from szl_khipu_scholar.receipts import (
+        DEFAULT_TRUST_ROOT, TrustRootError, load_trust_root, verify_receipt_dict)
+    # No readable trust root means nothing is pinned, so nothing can be AUTHORIZED.
+    try:
+        pins = load_trust_root(os.environ.get("KHIPU_TRUST_ROOT") or DEFAULT_TRUST_ROOT)
+        trust_root = {"state": "LOADED", "pinned_nodes": len(pins)}
+    except TrustRootError as e:
+        pins, trust_root = None, {"state": "UNAVAILABLE", "error": str(e)[:200]}
     out: List[Dict[str, Any]] = []
     for f in files:
         try:
             _, download_fn = _hub()
             p = download_fn(RUNS_REPO, f, repo_type="dataset")
             doc = json.loads(Path(p).read_text(encoding="utf-8"))
-            v = verify_receipt_dict(doc)
+            v = verify_receipt_dict(doc, pins)
             out.append({"file": f, "node": v.get("node"), "type": v.get("type"),
-                        "verdict": v["verdict"], "ts": v.get("ts")})
+                        "verdict": v["verdict"], "signature": v["signature"],
+                        "key_state": v["key_state"], "ts": v.get("ts")})
         except Exception as e:
-            out.append({"file": f, "verdict": "OBSERVED", "error": repr(e)[:120]})
-    return {"repo": RUNS_REPO, "count": len(out), "receipts": out}
+            out.append({"file": f, "verdict": "OBSERVED", "signature": "UNCHECKED",
+                        "key_state": "ABSENT", "error": repr(e)[:120]})
+    return {"repo": RUNS_REPO, "count": len(out), "trust_root": trust_root, "receipts": out}
 
 
 @app.get("/census")
@@ -81,4 +91,4 @@ def census() -> Dict[str, Any]:
 def models() -> Dict[str, Any]:
     return {"ok": True, "status": "TRAINING (receipted; see /receipts)",
             "models": [{"repo": "SZLHOLDINGS/" + k, "base": v} for k, v in MODELS.items()],
-            "canonical_record": "DSSE receipts in " + RUNS_REPO}
+            "canonical_record": "signed receipts in " + RUNS_REPO}
