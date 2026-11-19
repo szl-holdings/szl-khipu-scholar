@@ -11,7 +11,7 @@ Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github
 | Layer | Status | Evidence |
 |---|---|---|
 | Corpus (42 open-access docs, sha256 hash-pinned) | LIVE | [SZLHOLDINGS/khipu-scholars-corpus-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholars-corpus-v1) |
-| QA dataset (770 rows from OKR khipu_main: 619 khipus / 54,403 cords / 110,677 knots) | LIVE | [SZLHOLDINGS/khipu-scholars-sft-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholars-sft-v1) |
+| SFT dataset (770 rows: 516 corpus-text, 250 OKR-derived QA, 4 doctrine, per its `sft_manifest.json`; OKR khipu_main holds 619 khipus / 54,403 cords / 110,677 knots) | LIVE | [SZLHOLDINGS/khipu-scholars-sft-v1](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholars-sft-v1) |
 | LoRA adapters (Qwen3-1.7B / 4B) | scholar-v1 RELEASED (final loss 0.0085, 2,000 steps, 9.45 GPU-hours, signed receipt); structure-v1 RELEASED + EVAL (loss 0.0360, 2,000 steps, 25.62 GPU-hours; held-out cipher_exact_match 0.9113 over 343 rows, n=282, signed receipt); 4B TRAINING (restarted 2026-11-19, honest ETA ~2026-11-20) | [salad-khipu-scholar-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-v1) · [salad-khipu-scholar-4b-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-scholar-4b-v1) · [salad-khipu-structure-v1](https://huggingface.co/SZLHOLDINGS/salad-khipu-structure-v1) |
 | Signed receipts (boot / crash / state / complete; per-boot lane keys, none pinned yet, so none AUTHORIZED) | LIVE | [SZLHOLDINGS/khipu-scholar-runs](https://huggingface.co/datasets/SZLHOLDINGS/khipu-scholar-runs) |
 | Mesh liveness beacons (cross-verified DSSE) | LIVE | [SZLHOLDINGS/mesh-liveness](https://huggingface.co/datasets/SZLHOLDINGS/mesh-liveness) |
