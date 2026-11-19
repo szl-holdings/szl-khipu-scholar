@@ -25,3 +25,5 @@ jobs:
         run: python -m pip install -e ".[verify,server]" pytest httpx
       - name: Test
         run: python -m pytest -q tests
+      - name: Explorer logic
+        run: node --test frontend/feed.test.js

@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Space-separated API origins this page may read receipts from, besides its own origin and loopback. -->
+<meta name="khipu-api-origins" content="">
 <title>Khipu Scholar Explorer - SZL Holdings</title>
 <style>
   :root { --ink:#111; --paper:#faf7f0; --knot:#8a4b08; --ok:#0a6b2d; --obs:#9a6b00; }
@@ -65,36 +67,40 @@
   </section>
 </main>
 <footer>Khipu Scholar Explorer - part of the SZL governed-AI estate - <a href="https://github.com/szl-holdings/szl-khipu-scholar">source</a></footer>
+<script src="feed.js"></script>
 <script>
 (async () => {
   const note = document.getElementById('receipts-note');
   const table = document.getElementById('receipts');
-  const api = new URLSearchParams(location.search).get('api');
-  if (!api) { note.textContent = 'Receipts feed: launch server/app.py and pass ?api=http://127.0.0.1:8787 to view live signed receipts.'; return; }
+  const meta = document.querySelector('meta[name="khipu-api-origins"]');
+  const feed = KhipuFeed.resolveFeed(new URLSearchParams(location.search).get('api'), location.href,
+                                     KhipuFeed.declaredOrigins(meta && meta.content));
+  if (!feed.ok) {
+    note.textContent = feed.reason === 'MISSING'
+      ? 'Receipts feed: launch server/app.py and pass ?api=http://127.0.0.1:8787 to view live signed receipts.'
+      : 'Receipts feed refused (' + feed.reason + (feed.origin ? ': ' + feed.origin : '') +
+        '). Only this page\'s origin, a loopback address, or an origin declared in the page is used.';
+    return;
+  }
   try {
-    const r = await fetch(api + '/receipts');
+    const r = await fetch(feed.feedUrl);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
-    const tb = table.querySelector('tbody');
-    // Receipt fields come from files anyone with write access to the runs repo can
-    // author, so they are rendered as text, never as markup.
-    tb.replaceChildren(...(d.receipts || []).map(x => {
+    const rows = Array.isArray(d.receipts) ? d.receipts : [];
+    table.querySelector('tbody').replaceChildren(...rows.map(x => {
       const tr = document.createElement('tr');
-      const verdict = x.verdict === 'AUTHORIZED' ? 'AUTHORIZED' : 'OBSERVED';
-      [x.file, x.node, x.type, x.signature, x.key_state, verdict].forEach((value, i) => {
+      KhipuFeed.rowCells(x).forEach((value, i, all) => {
         const td = document.createElement('td');
-        td.textContent = value == null ? '' : String(value);
-        if (i === 5) td.className = verdict;
+        td.textContent = value;
+        if (i === all.length - 1) td.className = value;
         tr.appendChild(td);
       });
       return tr;
     }));
     table.style.display = '';
-    const pinned = d.trust_root && d.trust_root.state === 'LOADED' ? d.trust_root.pinned_nodes : 0;
-    note.textContent = 'Live feed: ' + d.count + ' receipts from ' + d.repo + '. Verified server-side against ' +
-      pinned + ' pinned lane(s). AUTHORIZED means signed by a pinned lane key; a receipt that only matches the key it carries is OBSERVED.';
+    note.textContent = KhipuFeed.feedNote(d, feed.origin);
   } catch (e) {
-    note.textContent = 'Receipts feed unavailable (' + e.message + '). Fail closed: showing nothing rather than unverified data.';
+    note.textContent = 'Receipts feed unavailable (' + KhipuFeed.cellText(e && e.message) + '). Fail closed: showing nothing rather than unverified data.';
   }
 })();
 </script>

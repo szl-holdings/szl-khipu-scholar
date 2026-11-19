@@ -15,8 +15,10 @@ nacl_signing = pytest.importorskip("nacl.signing")
 SigningKey = nacl_signing.SigningKey
 
 from szl_khipu_scholar.receipts import (  # noqa: E402
+    ReceiptParseError,
     TrustRootError,
     load_trust_root,
+    parse_receipt,
     verify_receipt_dict,
     verify_receipt_file,
 )
@@ -206,3 +208,105 @@ def test_unreadable_receipt_file_is_observed(tmp_path):
     v = verify_receipt_file(tmp_path / "absent.json")
     assert v["ok"] is False
     assert v["verdict"] == "OBSERVED"
+
+
+# --- review round 1 ---------------------------------------------------------
+
+def test_keyless_receipt_is_checked_against_every_pin(lane):
+    """A state receipt carries no key; any of the node's pins may have signed it."""
+    first = SigningKey.generate()
+    v = verify_receipt_dict(_receipt(lane, rtype="state", embed=False, step=3),
+                            {NODE: [_hex(first), _hex(lane)]})
+    assert (v["verdict"], v["key_state"], v["pubkey"]) == ("AUTHORIZED", "PINNED", _hex(lane))
+
+
+@pytest.mark.parametrize("pin", [
+    "00" * 31,                    # even-length hex, 31 bytes
+    "00" * 31 + "  ",             # 64 characters, 31 bytes once whitespace is skipped
+    "00" * 15 + "\t\t" + "00" * 16,
+    "00" * 33,
+])
+def test_pins_must_be_exactly_64_hex_characters(lane, pin):
+    v = verify_receipt_dict(_receipt(lane, embed=False), {NODE: pin})
+    assert v["verdict"] == "OBSERVED"
+    assert v["key_state"] == "MISMATCH"
+
+
+@pytest.mark.parametrize("pin_value", [5, True, 1.5, None, object(), {"k": "v"}])
+def test_unusable_pin_values_are_mismatch_not_errors(lane, pin_value):
+    v = verify_receipt_dict(_receipt(lane), {NODE: pin_value})
+    assert (v["verdict"], v["key_state"]) == ("OBSERVED", "MISMATCH")
+
+
+def test_generator_pins_are_not_trusted_even_once(lane):
+    v = verify_receipt_dict(_receipt(lane), {NODE: (k for k in [_hex(lane)])})
+    assert (v["verdict"], v["key_state"]) == ("OBSERVED", "MISMATCH")
+
+
+@pytest.mark.parametrize("pins", [["khipu-scholar-v1"], "khipu-scholar-v1", 7])
+def test_pin_map_must_be_a_mapping(lane, pins):
+    v = verify_receipt_dict(_receipt(lane), pins)
+    assert (v["verdict"], v["key_state"]) == ("OBSERVED", "UNCHECKED")
+
+
+@pytest.mark.parametrize("node", [["khipu-scholar-v1"], {"a": 1}, 3, None])
+def test_non_string_nodes_never_match_a_pin(lane, node):
+    """Unhashable nodes must not reach the pin lookup."""
+    v = verify_receipt_dict(_receipt(lane, node=node), {NODE: _hex(lane)})
+    assert v["verdict"] == "OBSERVED"
+
+
+@pytest.mark.parametrize("bad", [{1, 2}, b"bytes", object()])
+def test_unserializable_body_is_observed_not_an_error(lane, bad):
+    doc = _receipt(lane)
+    doc["payload"] = dict(doc["payload"], extra=bad)
+    v = verify_receipt_dict(doc, {NODE: _hex(lane)})
+    assert v["verdict"] == "OBSERVED"
+    assert v["signature"] == "UNCHECKED"
+
+
+def test_deeply_nested_body_is_observed(lane):
+    deep = current = {}
+    for _ in range(5000):
+        current["x"] = {}
+        current = current["x"]
+    doc = _receipt(lane)
+    doc["payload"] = dict(doc["payload"], deep=deep)
+    assert verify_receipt_dict(doc, {NODE: _hex(lane)})["verdict"] == "OBSERVED"
+
+
+@pytest.mark.parametrize("sig", [b"00" * 64, ["00"], "0" * 127, "0" * 129, "zz" * 64])
+def test_malformed_sig_is_invalid(lane, sig):
+    doc = _receipt(lane)
+    doc["sig"] = sig
+    v = verify_receipt_dict(doc, {NODE: _hex(lane)})
+    assert (v["verdict"], v["signature"]) == ("OBSERVED", "INVALID")
+
+
+def test_malformed_carried_key_is_not_called_a_bad_signature(stranger):
+    doc = _receipt(stranger)
+    doc["payload"]["pubkey"] = "not-a-key"
+    v = verify_receipt_dict(doc)
+    assert (v["signature"], v["key_state"]) == ("UNCHECKED", "UNPINNED")
+
+
+def test_duplicate_keys_in_a_receipt_file_are_refused(tmp_path, lane):
+    signed = _receipt(lane, final_loss=0.0085)
+    raw = json.dumps(signed).replace('"final_loss": 0.0085', '"final_loss": 0.0001, "final_loss": 0.0085')
+    with pytest.raises(ReceiptParseError):
+        parse_receipt(raw)
+    path = tmp_path / "r.json"
+    path.write_text(raw, encoding="utf-8")
+    v = verify_receipt_file(path, {NODE: _hex(lane)})
+    assert (v["verdict"], v["key_state"]) == ("OBSERVED", "UNCHECKED")
+
+
+@pytest.mark.parametrize("entry", [
+    {"node": " ", "pubkey": "00" * 32, "basis": "TEST"},
+    {"node": NODE + " ", "pubkey": "00" * 32, "basis": "TEST"},
+    {"node": NODE, "pubkey": "00" * 32, "basis": "  "},
+    {"node": NODE, "pubkey": "00" * 31 + "  ", "basis": "TEST"},
+])
+def test_trust_root_rejects_blank_or_padded_entries(tmp_path, entry):
+    with pytest.raises(TrustRootError):
+        load_trust_root(_root(tmp_path, [entry]))

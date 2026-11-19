@@ -27,7 +27,7 @@ Khipu Scholar is the scholarly-data product of the [SZL Holdings](https://github
 
 ## Why it matters (for investors)
 
-Every autonomous or model-assisted step in this product line signs its work: training boots, crashes, state transitions, and completions are signed records. Today a third party can check that a receipt is unchanged since it was signed, but not who signed it: each lane generates a fresh key at boot, and no lane key is endorsed or pinned yet (see [docs/RECEIPTS.md](docs/RECEIPTS.md)). Endorsing lane keys is ROADMAP. That is the estate's core thesis - **AI that signs its work** - applied to a real scholarly domain (Andean khipu studies) with licensing discipline as a first-class feature.
+Every autonomous or model-assisted step in this product line signs its work: training boots, crashes, state transitions, and completions are signed records. Until a lane key is pinned, a valid signature shows only that a receipt was signed by the key it carries: anyone able to write a receipt could re-sign altered content and it would verify the same way. Each lane generates a fresh key at boot, and no lane key is endorsed or pinned yet (see [docs/RECEIPTS.md](docs/RECEIPTS.md)). Endorsing lane keys is ROADMAP. That is the estate's core thesis - **AI that signs its work** - applied to a real scholarly domain (Andean khipu studies) with licensing discipline as a first-class feature.
 
 Monetization path (staged, owner-gated): metered inference through the estate's x402 pattern ([szl-inference-gateway](https://github.com/szl-holdings/szl-inference-gateway)), a receipts-verification API service, and corpus/QA tooling. Cloudflare deployment wiring is staged under `cloudflare/`.
 

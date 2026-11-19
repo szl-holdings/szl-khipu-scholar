@@ -19,7 +19,7 @@ classifiers = [
 
 [project.optional-dependencies]
 verify = ["szl-mesh>=0.1.0", "pynacl>=1.5", "huggingface_hub>=0.30"]
-server = ["fastapi>=0.110", "uvicorn>=0.29", "huggingface_hub>=0.30"]
+server = ["fastapi>=0.110", "uvicorn>=0.29", "huggingface_hub>=0.30", "pynacl>=1.5"]
 
 [project.urls]
 Homepage = "https://github.com/szl-holdings/szl-khipu-scholar"
@@ -31,3 +31,6 @@ include = ["szl_khipu_scholar*"]
 
 [tool.setuptools.package-data]
 szl_khipu_scholar = ["trust/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
