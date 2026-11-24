@@ -321,3 +321,171 @@ def test_store_writes_are_durable_and_leave_no_temp_files(tmp_path, monkeypatch)
         s.put("tile/0/000.p/2", b"a" * 64)
     assert sorted(p.name for p in (tmp_path / "tile" / "0").iterdir()) == ["000.p"]
     assert sorted(p.name for p in (tmp_path / "tile" / "0" / "000.p").iterdir()) == ["1"]
+
+
+# --- the writer never signs a tree that does not extend what its key signed ------
+
+def _open(msg, signer):
+    return open_checkpoint(msg, [signer.verifier], origin=ORIGIN)[0]
+
+
+def test_restarted_writer_refuses_to_sign_a_fork(tmp_path, signer):
+    from szl_khipu_scholar.tlog import LogStateError
+    cp3 = _open(make_log(tmp_path, signer, 3).publish(), signer)
+    again = TileLog(DirTileStore(tmp_path), ORIGIN, signer)          # a process restart
+    for e in [entry(0), entry(1), b"OTHER 2", b"OTHER 3"]:
+        again.append(e)
+    with pytest.raises(LogStateError, match="does not extend"):
+        again.publish()
+    assert _open((tmp_path / "checkpoint").read_bytes(), signer) == cp3
+
+
+def test_restarted_writer_refuses_to_sign_a_rollback(tmp_path, signer):
+    from szl_khipu_scholar.tlog import LogStateError
+    make_log(tmp_path, signer, 4).publish()
+    again = TileLog(DirTileStore(tmp_path), ORIGIN, signer)
+    again.append(entry(0))
+    with pytest.raises(LogStateError, match="already signed size 4"):
+        again.publish()
+
+
+def test_restarted_writer_with_the_same_entries_still_publishes(tmp_path, signer):
+    old = _open(make_log(tmp_path, signer, 3).publish(), signer)
+    new = _open(make_log(tmp_path, signer, 5).publish(), signer)
+    reader = TileReader(DirTileStore(tmp_path), 5)
+    merkle.verify_consistency(3, 5, reader.consistency_proof(3), old.root, new.root)
+
+
+def test_state_file_outside_the_directory_stops_a_fork_after_a_rollback(tmp_path, signer):
+    """Someone who can write the served directory rolls `checkpoint` back and
+    deletes the newer tiles before a restart. The directory then looks like an
+    honest size-3 log; only the state file outside it remembers size 5."""
+    from szl_khipu_scholar.tlog import LogStateError
+    logdir, state = tmp_path / "log", tmp_path / "keep" / "receipts.state"
+    state.parent.mkdir()
+    log = TileLog(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+    for i in range(3):
+        log.append(entry(i))
+    cp3 = log.publish()
+    log.append(entry(3))
+    log.append(entry(4))
+    cp5 = _open(log.publish(), signer)
+    assert state.read_text() == cp5.text()
+    (logdir / "checkpoint").write_bytes(cp3)
+    for p in ("tile/0/000.p/5", "tile/entries/000.p/5"):
+        (logdir / p).unlink()
+    again = TileLog(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+    for e in [entry(0), entry(1), entry(2), b"OTHER 3", b"OTHER 4", b"OTHER 5"]:
+        again.append(e)
+    with pytest.raises(LogStateError, match="does not extend the signed size-5"):
+        again.publish()
+    with pytest.raises(TileNotFound):
+        TileLog.resume(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+
+
+def test_state_file_must_live_outside_the_served_directory(tmp_path, signer):
+    with pytest.raises(ValueError, match="outside"):
+        TileLog(DirTileStore(tmp_path), ORIGIN, signer, state_path=tmp_path / "x" / "state")
+
+
+def test_resume_rebuilds_from_entry_bundles_and_keeps_extending(tmp_path, signer):
+    from szl_khipu_scholar.tlog import LogStateError
+    logdir, state = tmp_path / "log", tmp_path / "receipts.state"
+    log = TileLog(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+    for i in range(300):
+        log.append(entry(i))
+    old = _open(log.publish(), signer)
+    for kw in ({"state_path": state}, {}):                # with and without the state file
+        again = TileLog.resume(DirTileStore(logdir), ORIGIN, signer, **kw)
+        assert again.size == 300 and again.root() == old.root
+    for i in range(300, 600):
+        again.append(entry(i))
+    new = _open(again.publish(), signer)
+    reader = TileReader(DirTileStore(logdir), 600)
+    assert reader.root() == new.root
+    merkle.verify_consistency(300, 600, reader.consistency_proof(300), old.root, new.root)
+    bundle = logdir / "tile/entries/000"
+    bundle.write_bytes(bundle.read_bytes().replace(b'"n":7,', b'"n":8,', 1))
+    with pytest.raises(LogStateError, match="do not rebuild"):
+        TileLog.resume(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+
+
+class _CrashAfter:
+    """A store whose writes start failing after `n` puts: an interrupted publish."""
+
+    def __init__(self, inner, n):
+        self.inner, self.n, self.root = inner, n, inner.root
+
+    def put(self, rel, data, *, immutable=True):
+        if self.n == 0:
+            raise OSError("simulated crash")
+        self.n -= 1
+        self.inner.put(rel, data, immutable=immutable)
+
+    def get(self, rel):
+        return self.inner.get(rel)
+
+    __call__ = get
+
+
+def _crash_mid_publish(logdir, signer, state):
+    log = TileLog(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+    for i in range(3):
+        log.append(entry(i))
+    cp3 = _open(log.publish(), signer)
+    for i in range(3, 300):
+        log.append(entry(i))
+    log.store = _CrashAfter(DirTileStore(logdir), 1)       # dies after writing tile/0/000
+    with pytest.raises(OSError, match="simulated crash"):
+        log.publish()
+    assert (logdir / "tile/0/000").exists() and _open((logdir / "checkpoint").read_bytes(), signer) == cp3
+    return cp3
+
+
+def test_interrupted_publish_recovers_after_a_restart_with_a_state_file(tmp_path, signer):
+    logdir, state = tmp_path / "log", tmp_path / "receipts.state"
+    cp3 = _crash_mid_publish(logdir, signer, state)
+    again = TileLog.resume(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+    assert again.size == 3
+    for i in range(3, 300):                                 # never signed, so others may follow
+        again.append(b"different %d" % i)
+    cp = _open(again.publish(), signer)
+    reader = TileReader(DirTileStore(logdir), 300)
+    assert reader.root() == cp.root and reader.audit() == 1
+    merkle.verify_consistency(3, 300, reader.consistency_proof(3), cp3.root, cp.root)
+
+
+def test_interrupted_publish_without_a_state_file_keeps_refusing(tmp_path, signer):
+    """Without a record outside the directory the writer cannot tell an unsigned
+    leftover from a signed tile whose checkpoint was rolled back: it refuses."""
+    logdir = tmp_path / "log"
+    _crash_mid_publish(logdir, signer, None)
+    again = TileLog.resume(DirTileStore(logdir), ORIGIN, signer)
+    for i in range(3, 300):
+        again.append(b"different %d" % i)
+    with pytest.raises(TileError, match="immutable"):
+        again.publish()
+
+
+def test_publish_order_is_tiles_then_state_record_then_checkpoint(tmp_path, signer, monkeypatch):
+    import os
+    events = []
+
+    class Recording(DirTileStore):
+        def put(self, rel, data, **kw):
+            events.append(rel)
+            return super().put(rel, data, **kw)
+
+    real_replace = os.replace
+
+    def replace(src, dst, *a, **kw):
+        if str(dst).endswith("receipts.state"):
+            events.append("STATE")
+        return real_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", replace)
+    log = TileLog(Recording(tmp_path / "log"), ORIGIN, signer, state_path=tmp_path / "receipts.state")
+    for i in range(3):
+        log.append(entry(i))
+    log.publish()
+    assert events == ["tile/0/000.p/3", "tile/entries/000.p/3", "STATE", "checkpoint"]
