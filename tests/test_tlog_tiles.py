@@ -232,3 +232,92 @@ def test_tlog_package_does_not_touch_receipt_canonicalization():
         assert not re.search(r"^\s*(from|import)\s+.*\breceipts\b", src, re.M), p.name
         assert not re.search(r"^\s*import\s+json|from\s+json\s", src, re.M), p.name
         assert "sort_keys" not in src, p.name
+
+
+# --- the store never leaves its directory (someone may write it without the key) ---
+
+def _outside(tmp_path):
+    logdir, outside = tmp_path / "log", tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "victim.conf"
+    victim.write_bytes(b"important=1\n")
+    return logdir, outside, victim
+
+
+def test_store_does_not_write_through_planted_symlinks(tmp_path):
+    import os
+    logdir, outside, victim = _outside(tmp_path)
+    s = DirTileStore(logdir)
+    s.put("checkpoint", b"cp1", immutable=False)
+    os.symlink(victim, logdir / "checkpoint.tmp")         # the old fixed temp name
+    s.put("checkpoint", b"cp2", immutable=False)
+    assert victim.read_bytes() == b"important=1\n"
+    assert not (logdir / "checkpoint").is_symlink() and (logdir / "checkpoint").read_bytes() == b"cp2"
+    os.unlink(logdir / "checkpoint")
+    os.symlink(victim, logdir / "checkpoint")             # the target itself
+    s.put("checkpoint", b"cp3", immutable=False)          # replaces the link, not its target
+    assert victim.read_bytes() == b"important=1\n"
+    assert not (logdir / "checkpoint").is_symlink() and (logdir / "checkpoint").read_bytes() == b"cp3"
+
+
+def test_store_refuses_symlinks_below_its_root(tmp_path):
+    import os
+    logdir, outside, victim = _outside(tmp_path)
+    s = DirTileStore(logdir)
+    s.put("tile/0/000.p/1", b"a" * 32)
+    os.symlink(outside, logdir / "tile" / "entries")      # a symlinked directory
+    with pytest.raises(TileError, match="symlink"):
+        s.put("tile/entries/000.p/3", b"\x00\x01x")
+    with pytest.raises(TileError, match="symlink"):
+        s.get("tile/entries/victim.conf")
+    os.symlink(victim, logdir / "tile" / "0" / "000")     # a symlinked immutable tile
+    with pytest.raises(TileError, match="symlink"):
+        s.put("tile/0/000", b"important=1\n")             # neither read through nor kept
+    with pytest.raises(TileError, match="symlink"):
+        s.get("tile/0/000")
+    assert sorted(os.listdir(outside)) == ["victim.conf"]
+    assert victim.read_bytes() == b"important=1\n"
+
+
+def test_publish_refuses_a_symlinked_tile_directory_and_keeps_the_old_checkpoint(tmp_path, signer):
+    import os
+    logdir, outside, victim = _outside(tmp_path)
+    log = TileLog(DirTileStore(logdir), ORIGIN, signer)
+    log.append(entry(0))
+    first = log.publish()
+    os.rename(logdir / "tile" / "entries", tmp_path / "entries.bak")
+    os.symlink(outside, logdir / "tile" / "entries")
+    log.append(entry(1))
+    with pytest.raises(TileError, match="symlink"):
+        log.publish()
+    assert sorted(os.listdir(outside)) == ["victim.conf"]
+    assert (logdir / "checkpoint").read_bytes() == first
+
+
+def test_store_writes_are_durable_and_leave_no_temp_files(tmp_path, monkeypatch):
+    import os
+    events = []
+    real_fsync, real_replace = os.fsync, os.replace
+
+    def fsync(fd):
+        events.append("fsync")
+        return real_fsync(fd)
+
+    def replace(*a, **kw):
+        events.append("replace")
+        return real_replace(*a, **kw)
+
+    monkeypatch.setattr(os, "fsync", fsync)
+    monkeypatch.setattr(os, "replace", replace)
+    s = DirTileStore(tmp_path)
+    s.put("tile/0/000.p/1", b"a" * 32)
+    assert events == ["fsync", "replace", "fsync"]        # file, rename, directory
+
+    def broken(*a, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", broken)
+    with pytest.raises(OSError):
+        s.put("tile/0/000.p/2", b"a" * 64)
+    assert sorted(p.name for p in (tmp_path / "tile" / "0").iterdir()) == ["000.p"]
+    assert sorted(p.name for p in (tmp_path / "tile" / "0" / "000.p").iterdir()) == ["1"]

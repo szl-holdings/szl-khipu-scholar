@@ -13,8 +13,10 @@ floor(s / 256**L) mod 256 hashes and is never hashed into the level above.
 """
 from __future__ import annotations
 
+import errno
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Callable, Dict, List, Sequence, Tuple
 
@@ -135,38 +137,117 @@ def _fold(hashes: Sequence[bytes]) -> bytes:
     return layer[0]
 
 
+_DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+_READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+_TEMP_FLAGS = (os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0))
+
+
+def _read_at(dir_fd: int, name: str) -> "bytes | None":
+    """A regular file in an open directory, never through a symlink; None if absent."""
+    try:
+        fd = os.open(name, _READ_FLAGS, dir_fd=dir_fd)
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        if e.errno == errno.ELOOP:
+            raise TileError(f"refusing to follow a symlink at {name!r}") from None
+        raise
+    with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+            raise TileError(f"{name!r} is not a regular file")
+        return f.read()
+
+
 class DirTileStore:
     """Tiles as plain files under a directory, laid out exactly as served.
 
     Full tiles are immutable and written once. Partial tiles are kept for every
     published size: the spec obliges the log to serve the partial tiles of any
-    size it has checkpointed. Writes are atomic (temp file + rename)."""
+    size it has checkpointed. Writes are atomic and durable: an exclusive temp
+    file next to the target, fsync, rename, fsync of the directory.
+
+    Nothing below the root is opened through a symlink, so whoever can write the
+    served directory (but holds no key) cannot make the writer write or read
+    outside it. The root itself is the operator's choice. Needs a POSIX system
+    (directory file descriptors)."""
 
     def __init__(self, root: "str | os.PathLike[str]"):
         self.root = Path(root)
 
-    def _p(self, rel: str) -> Path:
-        if rel.startswith("/") or ".." in rel.split("/"):
+    @staticmethod
+    def _parts(rel: str) -> List[str]:
+        parts = rel.split("/")
+        if rel.startswith("/") or any(p in ("", ".", "..") for p in parts):
             raise TileError("bad resource path")
-        return self.root / rel
+        return parts
+
+    def _open_dir(self, parts: Sequence[str], create: bool) -> int:
+        if create:
+            self.root.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            for name in parts:
+                if create:
+                    try:
+                        os.mkdir(name, 0o755, dir_fd=fd)
+                    except FileExistsError:
+                        pass
+                try:
+                    nxt = os.open(name, _DIR_FLAGS, dir_fd=fd)
+                except OSError as e:
+                    if e.errno in (errno.ELOOP, errno.ENOTDIR):
+                        raise TileError(f"refusing a symlink or non-directory at {name!r} "
+                                        "below the log root") from None
+                    raise
+                os.close(fd)
+                fd = nxt
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
 
     def put(self, rel: str, data: bytes, *, immutable: bool = True) -> None:
-        p = self._p(rel)
-        if immutable and p.exists():
-            if p.read_bytes() != data:
-                raise TileError(f"refusing to change immutable resource {rel}")
-            return
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(p.name + ".tmp")
-        tmp.write_bytes(data)
-        os.replace(tmp, p)
+        parts = self._parts(rel)
+        dfd = self._open_dir(parts[:-1], create=True)
+        try:
+            name = parts[-1]
+            if immutable:
+                have = _read_at(dfd, name)
+                if have is not None:
+                    if have != data:
+                        raise TileError(f"refusing to change immutable resource {rel}")
+                    return
+            tmp = f".{name}.{os.urandom(8).hex()}.tmp"
+            fd = os.open(tmp, _TEMP_FLAGS, 0o644, dir_fd=dfd)
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(data)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
+            except BaseException:
+                try:
+                    os.unlink(tmp, dir_fd=dfd)
+                except OSError:
+                    pass
+                raise
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
 
     def get(self, rel: str) -> bytes:
-        p = self._p(rel)
+        parts = self._parts(rel)
         try:
-            return p.read_bytes()
+            dfd = self._open_dir(parts[:-1], create=False)
         except FileNotFoundError:
             raise TileNotFound(rel) from None
+        try:
+            data = _read_at(dfd, parts[-1])
+        finally:
+            os.close(dfd)
+        if data is None:
+            raise TileNotFound(rel)
+        return data
 
     __call__ = get
 
