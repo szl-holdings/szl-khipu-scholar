@@ -489,3 +489,41 @@ def test_publish_order_is_tiles_then_state_record_then_checkpoint(tmp_path, sign
         log.append(entry(i))
     log.publish()
     assert events == ["tile/0/000.p/3", "tile/entries/000.p/3", "STATE", "checkpoint"]
+
+
+# --- the reader uses no tile that is not tied to the signed root -----------------
+
+def test_reader_never_uses_a_hidden_tile_that_disagrees_with_the_tile_above(tmp_path, signer):
+    """A self-consistent forgery of tile/0/000 and its bundle hides under the good
+    level-1 hash: root() still matches. No lookup may hand out its hashes."""
+    cp = _open(make_log(tmp_path, signer, 300).publish(), signer)
+    forged = [entry(i) for i in range(256)]
+    forged[5] = b"FORGED receipt"
+    (tmp_path / "tile/entries/000").write_bytes(tiles.encode_bundle(forged))
+    (tmp_path / "tile/0/000").write_bytes(b"".join(merkle.hash_leaf(e) for e in forged))
+    for reader in (TileReader(DirTileStore(tmp_path), 300),
+                   TileReader(DirTileStore(tmp_path), 300, cp.root)):
+        assert reader.root() == cp.root
+        for call in (lambda: reader.leaf_hash(5), lambda: reader.inclusion_proof(5),
+                     lambda: reader.audit_bundle(0, tiles.encode_bundle(forged)), reader.audit):
+            with pytest.raises(TileError, match="does not hash to its parent"):
+                call()
+
+
+def test_reader_pinned_to_the_signed_root_rejects_a_forged_right_edge_tile(tmp_path, signer):
+    cp = _open(make_log(tmp_path, signer, 300).publish(), signer)
+    honest = TileReader(DirTileStore(tmp_path), 300, cp.root)
+    assert honest.root() == cp.root and honest.audit() == 1
+    merkle.verify_inclusion(299, 300, honest.leaf_hash(299), honest.inclusion_proof(299), cp.root)
+    forged = [entry(i) for i in range(256, 300)]
+    forged[0] = b"FORGED right edge"
+    (tmp_path / "tile/entries/001.p/44").write_bytes(tiles.encode_bundle(forged))
+    (tmp_path / "tile/0/001.p/44").write_bytes(b"".join(merkle.hash_leaf(e) for e in forged))
+    assert TileReader(DirTileStore(tmp_path), 300).root() != cp.root   # unpinned: caller must compare
+    pinned = TileReader(DirTileStore(tmp_path), 300, cp.root)
+    for call in (pinned.root, pinned.audit, lambda: pinned.leaf_hash(256),
+                 lambda: pinned.audit_bundle(1, tiles.encode_bundle(forged)),
+                 lambda: pinned.inclusion_proof(0), lambda: pinned.consistency_proof(10),
+                 lambda: pinned.node(0, 0)):
+        with pytest.raises(TileError, match="checkpoint root"):
+            call()

@@ -254,12 +254,21 @@ class DirTileStore:
 
 class TileReader:
     """Client side: node hashes, roots and proofs computed only from fetched
-    tiles. This is what a monitor or verifier does; it trusts nothing but the
-    checkpoint it was handed (root + size)."""
+    tiles. This is what a monitor or verifier does.
 
-    def __init__(self, fetch: Fetch, size: int):
+    Give it the size and root of a checkpoint you have verified
+    (`open_checkpoint`): before it answers anything, the reader checks that the
+    tiles reproduce that root, and raises TileError if they do not. Every full
+    tile is also checked against its hash in the tile above before any hash
+    from it is used, so a forged tile cannot hide under a good parent. Without
+    `root` only that second check runs, and the caller must compare `root()`
+    with the checkpoint before trusting any answer."""
+
+    def __init__(self, fetch: Fetch, size: int, root: "bytes | None" = None):
         self._fetch = fetch
         self.size = size
+        self.expected_root = None if root is None else bytes(root)
+        self._root_ok = root is None
         self._tiles: Dict[Tuple[int, int], List[bytes]] = {}
         self._nodes: Dict[Tuple[int, int], bytes] = {}
 
@@ -278,10 +287,16 @@ class TileReader:
                 # a partial may be pruned once the full tile exists
                 data = self._fetch(tile_path(level, index))
                 data = data[:width * merkle.HASH_SIZE]
-            self._tiles[key] = split_hashes(data, width)
+            hashes = split_hashes(data, width)
+            # A full tile is never read by root(): it sits under a hash in the
+            # tile above, which must agree with it. (Partial tiles form the
+            # right edge, which root() reads and the pinned root covers.)
+            if width == TILE_WIDTH and _fold(hashes) != self._node(TILE_HEIGHT * (level + 1), index):
+                raise TileError(f"tile level {level} index {index} does not hash to its parent")
+            self._tiles[key] = hashes
         return self._tiles[key]
 
-    def node(self, level: int, index: int) -> bytes:
+    def _node(self, level: int, index: int) -> bytes:
         if (index + 1) << level > self.size:
             raise TileError("node is not part of a complete subtree of this tree")
         key = (level, index)
@@ -291,49 +306,63 @@ class TileReader:
                 self._nodes[key] = self._tile(tl, index // TILE_WIDTH)[index % TILE_WIDTH]
             else:
                 self._nodes[key] = merkle.hash_children(
-                    self.node(level - 1, 2 * index), self.node(level - 1, 2 * index + 1))
+                    self._node(level - 1, 2 * index), self._node(level - 1, 2 * index + 1))
         return self._nodes[key]
 
+    def _checked(self) -> None:
+        if self._root_ok:
+            return
+        try:
+            got = merkle.tree_hash(self._node, self.size)
+        except BaseException:
+            self._tiles.clear()
+            self._nodes.clear()
+            raise
+        if got != self.expected_root:
+            self._tiles.clear()
+            self._nodes.clear()
+            raise TileError("tiles do not reproduce the checkpoint root")
+        self._root_ok = True
+
+    def node(self, level: int, index: int) -> bytes:
+        self._checked()
+        return self._node(level, index)
+
     def root(self) -> bytes:
-        return merkle.tree_hash(self.node, self.size)
+        self._checked()
+        return merkle.tree_hash(self._node, self.size)
 
     def inclusion_proof(self, index: int) -> List[bytes]:
-        return merkle.inclusion_proof(self.node, index, self.size)
+        self._checked()
+        return merkle.inclusion_proof(self._node, index, self.size)
 
     def consistency_proof(self, old_size: int) -> List[bytes]:
-        return merkle.consistency_proof(self.node, old_size, self.size)
+        self._checked()
+        return merkle.consistency_proof(self._node, old_size, self.size)
 
     def leaf_hash(self, index: int) -> bytes:
         return self.node(0, index)
 
     def audit(self) -> int:
-        """Check that every tile agrees with the tile above it.
+        """Check every full tile against its hash in the tile above it (and,
+        with a pinned root, the right edge against that root).
 
-        `root()` only reads the tiles it needs, so a bad lower tile can hide
-        behind a good higher one. This walks every tile of level >= 1 and
-        recomputes each of its hashes from the full tile below. Returns the
-        number of hashes checked; raises TileError on the first disagreement."""
+        Lookups only read the tiles they need, and `root()` reads only the right
+        edge, so this walks all of them. Returns the number of full tiles
+        checked; raises TileError on the first disagreement."""
+        self._checked()
         checked = 0
-        level = 1
-        while self.size >> (TILE_HEIGHT * level):
-            have = self.size >> (TILE_HEIGHT * level)
-            for idx in range((have + TILE_WIDTH - 1) // TILE_WIDTH):
-                upper = self._tile(level, idx)
-                for i, h in enumerate(upper):
-                    below = self._tile(level - 1, idx * TILE_WIDTH + i)
-                    if len(below) != TILE_WIDTH:
-                        raise TileError("a hash above a partial tile")
-                    got = _fold(below)
-                    if got != h:
-                        raise TileError(
-                            f"tile level {level - 1} index {idx * TILE_WIDTH + i} "
-                            f"does not hash to its parent")
-                    checked += 1
+        level = 0
+        while self.size >> (TILE_HEIGHT * (level + 1)):
+            for idx in range((self.size >> (TILE_HEIGHT * level)) // TILE_WIDTH):
+                self._tile(level, idx)
+                checked += 1
             level += 1
         return checked
 
     def audit_bundle(self, index: int, bundle: bytes) -> int:
         """Check an entry bundle against the level-0 tile it belongs to."""
+        self._checked()
         entries = decode_bundle(bundle)
         tile = self._tile(0, index)
         if len(entries) != len(tile):
