@@ -55,7 +55,7 @@ class Checkpoint:
             raise CheckpointError("need at least three non-empty lines")
         origin, size_s, root_s, *ext = lines
         if not (size_s.isascii() and size_s.isdigit()) or (len(size_s) > 1 and size_s[0] == "0"):
-            raise CheckpointError("tree size must be an ASCII decimal with no leading zeros")
+            raise CheckpointError("tree size must be a canonical ASCII decimal (no zero prefix)")
         try:
             root = b64decode_canonical(root_s)
         except NoteError as e:

@@ -136,7 +136,7 @@ def test_checkpoint_roundtrip_and_exact_text():
 
 @pytest.mark.parametrize("text", [
     "o\n1\n",                                           # two lines
-    f"o\n01\n{base64.b64encode(ROOT).decode()}\n",      # leading zero
+    f"o\n01\n{base64.b64encode(ROOT).decode()}\n",      # zero-prefixed size
     f"o\n-1\n{base64.b64encode(ROOT).decode()}\n",      # sign
     f"o\n1\n{base64.b64encode(ROOT[:31]).decode()}\n",  # short root
     "o\n1\nnot-base64!\n",

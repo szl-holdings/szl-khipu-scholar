@@ -58,7 +58,7 @@ def decode_index(s: str) -> int:
     n = 0
     for part in s.split("/"):
         n = n * 1000 + int(part.lstrip("x"))
-    if encode_index(n) != s:           # rejects redundant leading x000 groups
+    if encode_index(n) != s:           # rejects redundant x000 groups in front
         raise TileError("non-canonical tile index")
     return n
 
