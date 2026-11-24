@@ -549,3 +549,37 @@ def test_tiles_must_be_exactly_width_hashes(tmp_path, signer):
     for reader in (TileReader(DirTileStore(tmp_path), 3), TileReader(DirTileStore(tmp_path), 3, cp.root)):
         with pytest.raises(TileError, match="exactly width"):
             reader.root()
+
+
+def test_signed_tiles_stay_immutable_even_with_a_state_file(tmp_path, signer):
+    """Only resources beyond every signed size may be replaced. A tampered tile
+    of a signed size is refused, not silently rewritten."""
+    logdir, state = tmp_path / "log", tmp_path / "receipts.state"
+    log = TileLog(DirTileStore(logdir), ORIGIN, signer, state_path=state)
+    for i in range(300):
+        log.append(entry(i))
+    log.publish()
+    p = logdir / "tile/0/000"
+    raw = bytearray(p.read_bytes())
+    raw[0] ^= 1
+    p.write_bytes(bytes(raw))
+    log.append(entry(300))
+    with pytest.raises(TileError, match="immutable resource tile/0/000"):
+        log.publish()
+
+
+def test_a_failed_root_check_keeps_nothing(tmp_path, signer):
+    cp = _open(make_log(tmp_path, signer, 300).publish(), signer)
+    store, bad = DirTileStore(tmp_path), {"on": True}
+
+    def fetch(rel):
+        data = store.get(rel)
+        if bad["on"] and rel == "tile/0/001.p/44":
+            return bytes([data[0] ^ 1]) + data[1:]
+        return data
+
+    reader = TileReader(fetch, 300, cp.root)
+    with pytest.raises(TileError, match="checkpoint root"):
+        reader.leaf_hash(299)
+    bad["on"] = False                                   # e.g. a transient bad fetch
+    assert reader.leaf_hash(299) == merkle.hash_leaf(entry(299))

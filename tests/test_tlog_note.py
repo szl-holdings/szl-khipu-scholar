@@ -248,3 +248,17 @@ def test_signature_line_limit():
         assert len(N.open_note(msg, [log.verifier]).unknown) == count - 1
     with pytest.raises(N.NoteError, match="too many"):
         N.open_note(N.sign_note("t\n", [log] + others), [log.verifier])
+
+
+@pytest.mark.parametrize("line", [
+    "— bad+name.example/w AAAAAAAAAAAAAAAAAAAAAA==\n",     # '+' in a key name
+    "— bad name.example/w AAAAAAAAAAAAAAAAAAAAAA==\n",  # a Unicode space
+    "—  AAAAAAAAAAAAAAAAAAAAAA==\n",                        # empty name
+    "— w.example/w AAAA\n",                                 # under 5 bytes
+])
+def test_unknown_key_lines_must_still_be_well_formed(line):
+    """Unknown keys are ignored, but every line must have the signed-note shape:
+    Go's note.Open rejects these too (errMalformedNote)."""
+    s = N.Signer.generate(ORIGIN)
+    with pytest.raises(N.NoteError):
+        N.open_note(N.sign_note("t\n", [s]) + line.encode(), [s.verifier])
