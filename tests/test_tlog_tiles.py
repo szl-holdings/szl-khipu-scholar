@@ -527,3 +527,25 @@ def test_reader_pinned_to_the_signed_root_rejects_a_forged_right_edge_tile(tmp_p
                  lambda: pinned.node(0, 0)):
         with pytest.raises(TileError, match="checkpoint root"):
             call()
+
+
+# --- shape checks on what readers fetch ------------------------------------------
+
+def test_audit_bundle_needs_exactly_the_tile_width(tmp_path, signer):
+    cp = _open(make_log(tmp_path, signer, 3).publish(), signer)
+    r = TileReader(DirTileStore(tmp_path), 3, cp.root)
+    good = (tmp_path / "tile/entries/000.p/3").read_bytes()
+    assert r.audit_bundle(0, good) == 3
+    with pytest.raises(TileError, match="different widths"):        # honest 3 + 1 forged
+        r.audit_bundle(0, good + tiles.encode_bundle([b"forged extra entry"]))
+    with pytest.raises(TileError, match="different widths"):
+        r.audit_bundle(0, tiles.encode_bundle(tiles.decode_bundle(good)[:2]))
+
+
+def test_tiles_must_be_exactly_width_hashes(tmp_path, signer):
+    cp = _open(make_log(tmp_path, signer, 3).publish(), signer)
+    p = tmp_path / "tile/0/000.p/3"
+    p.write_bytes(p.read_bytes() + b"\x00" * 32)                   # a 4th hash in a width-3 tile
+    for reader in (TileReader(DirTileStore(tmp_path), 3), TileReader(DirTileStore(tmp_path), 3, cp.root)):
+        with pytest.raises(TileError, match="exactly width"):
+            reader.root()

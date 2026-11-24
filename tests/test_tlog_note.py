@@ -234,3 +234,15 @@ def test_tree_size_must_fit_in_a_uint64():
     huge = N.sign_note(f"{ORIGIN}\n1{'0' * 5000}\n{root64}\n", [log])
     with pytest.raises(CheckpointError, match="uint64"):
         open_checkpoint(huge, [log.verifier], origin=ORIGIN)
+
+
+def test_signature_line_limit():
+    """The spec asks verifiers to accept at least 16 signatures and to apply a
+    limit: MAX_SIGNATURES lines are accepted, one more is refused."""
+    log = N.Signer.generate(ORIGIN)
+    others = [N.Signer.generate(f"w{i}.example/wit") for i in range(N.MAX_SIGNATURES)]
+    for count in (16, N.MAX_SIGNATURES):
+        msg = N.sign_note("t\n", [log] + others[:count - 1])
+        assert len(N.open_note(msg, [log.verifier]).unknown) == count - 1
+    with pytest.raises(N.NoteError, match="too many"):
+        N.open_note(N.sign_note("t\n", [log] + others), [log.verifier])
