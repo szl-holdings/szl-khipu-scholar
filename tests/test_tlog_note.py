@@ -37,6 +37,8 @@ def test_spec_example_tamper_and_wrong_key_rejected():
 
 def test_vkey_must_be_self_consistent():
     s = N.Signer.generate("log.example/x")
+    while s.verifier.key_id.hex().isdigit():    # ~2% of key ids have no a-f: upper() would not change them
+        s = N.Signer.generate("log.example/x")
     assert N.Verifier.from_vkey(s.verifier.vkey()) == s.verifier
     name, kid, blob = s.verifier.vkey().split("+", 2)
     for bad in (f"{name}+00000000+{blob}", f"{name}+{kid.upper()}+{blob}", f"{name}+{kid}",
@@ -136,7 +138,7 @@ def test_checkpoint_roundtrip_and_exact_text():
 
 @pytest.mark.parametrize("text", [
     "o\n1\n",                                           # two lines
-    f"o\n01\n{base64.b64encode(ROOT).decode()}\n",      # leading zero
+    f"o\n01\n{base64.b64encode(ROOT).decode()}\n",      # zero-prefixed size
     f"o\n-1\n{base64.b64encode(ROOT).decode()}\n",      # sign
     f"o\n1\n{base64.b64encode(ROOT[:31]).decode()}\n",  # short root
     "o\n1\nnot-base64!\n",
@@ -161,3 +163,102 @@ def test_open_checkpoint_pins_origin_and_log_key():
     only_wit = sign_checkpoint(Checkpoint(ORIGIN, 5, ROOT), [wit])
     with pytest.raises(CheckpointError, match="log's own key"):
         open_checkpoint(only_wit, [wit.verifier], origin=ORIGIN)
+
+
+def test_default_open_checkpoint_requires_the_origins_own_key():
+    """Without `origin`, a checkpoint is still accepted only when the key named
+    by its own origin line signed it. Another log's key or a witness key that
+    the client also trusts is a cosigner, never the log signature."""
+    a, b = N.Signer.generate("example.com/logA"), N.Signer.generate("example.com/logB")
+    wit = N.Signer.generate("witness.example/w1")
+    known = [a.verifier, b.verifier, wit.verifier]
+    cp_a = Checkpoint("example.com/logA", 1, ROOT)
+    for signers in ([b], [wit], [b, wit]):
+        with pytest.raises(CheckpointError, match="log's own key"):
+            open_checkpoint(sign_checkpoint(cp_a, signers), known)
+    cp, opened = open_checkpoint(sign_checkpoint(cp_a, [a, wit]), known)
+    assert cp == cp_a
+    assert [v.name for v in opened.verified] == ["example.com/logA", "witness.example/w1"]
+
+
+def test_size_zero_checkpoint_must_carry_the_empty_tree_root():
+    import hashlib
+    log = N.Signer.generate(ORIGIN)
+    empty = hashlib.sha256(b"").digest()
+    cp, _ = open_checkpoint(sign_checkpoint(Checkpoint(ORIGIN, 0, empty), [log]),
+                            [log.verifier], origin=ORIGIN)
+    assert (cp.size, cp.root) == (0, empty)
+    with pytest.raises(CheckpointError, match="empty-tree root"):
+        open_checkpoint(sign_checkpoint(Checkpoint(ORIGIN, 0, ROOT), [log]),
+                        [log.verifier], origin=ORIGIN)
+
+
+def test_del_is_not_a_control_character_in_signed_notes():
+    """c2sp.org/signed-note: control characters are those below U+0020 (newline
+    allowed); key names exclude only Unicode spaces and '+'. U+007F is neither."""
+    s = N.Signer.generate("del\x7fname.example/log")
+    assert N.Verifier.from_vkey(s.verifier.vkey()) == s.verifier
+    msg = N.sign_note("hello\x7fworld\n", [s])
+    assert N.open_note(msg, [s.verifier]).text == "hello\x7fworld\n"
+    known = N.Signer.generate(ORIGIN)
+    with_unknown = N.sign_note("t\n", [known, s])            # an unknown line whose name has U+007F
+    opened = N.open_note(with_unknown, [known.verifier])
+    assert [v.name for v in opened.verified] == [ORIGIN] and len(opened.unknown) == 1
+    for bad in ("tab\x09name", "nul\x00name", "esc\x1bname"):
+        with pytest.raises(N.NoteError):
+            N.Signer.generate(bad)
+
+
+def test_repeated_unknown_key_lines_are_ignored_by_notes_but_not_by_checkpoints():
+    log, wit = N.Signer.generate(ORIGIN), N.Signer.generate("witness.example/w")
+    msg = sign_checkpoint(Checkpoint(ORIGIN, 5, ROOT), [log, wit]).decode()
+    wit_line = msg.rstrip("\n").split("\n")[-1] + "\n"
+    doubled = (msg + wit_line).encode()
+    opened = N.open_note(doubled, [log.verifier])            # signed-note: unknown keys are ignored
+    assert [v.name for v in opened.verified] == [ORIGIN] and len(opened.unknown) == 2
+    with pytest.raises(CheckpointError, match="same key name and id"):
+        open_checkpoint(doubled, [log.verifier], origin=ORIGIN)   # tlog-checkpoint: MUST NOT repeat
+    with pytest.raises(N.NoteError, match="duplicate"):
+        N.open_note(doubled, [log.verifier, wit.verifier])    # a repeated known key still rejects
+
+
+def test_tree_size_must_fit_in_a_uint64():
+    """Go's formats/log parses the size as a uint64. A size that does not fit,
+    or one too long for int() to convert, is a CheckpointError, not a crash."""
+    root64 = base64.b64encode(ROOT).decode()
+    assert Checkpoint.parse(f"o\n18446744073709551615\n{root64}\n").size == 2**64 - 1
+    for size in ("18446744073709551616", "9" * 21, "1" + "0" * 5000):
+        with pytest.raises(CheckpointError, match="uint64"):
+            Checkpoint.parse(f"o\n{size}\n{root64}\n")
+    with pytest.raises(CheckpointError, match="uint64"):
+        Checkpoint("o", 2**64, ROOT)
+    log = N.Signer.generate(ORIGIN)
+    huge = N.sign_note(f"{ORIGIN}\n1{'0' * 5000}\n{root64}\n", [log])
+    with pytest.raises(CheckpointError, match="uint64"):
+        open_checkpoint(huge, [log.verifier], origin=ORIGIN)
+
+
+def test_signature_line_limit():
+    """The spec asks verifiers to accept at least 16 signatures and to apply a
+    limit: MAX_SIGNATURES lines are accepted, one more is refused."""
+    log = N.Signer.generate(ORIGIN)
+    others = [N.Signer.generate(f"w{i}.example/wit") for i in range(N.MAX_SIGNATURES)]
+    for count in (16, N.MAX_SIGNATURES):
+        msg = N.sign_note("t\n", [log] + others[:count - 1])
+        assert len(N.open_note(msg, [log.verifier]).unknown) == count - 1
+    with pytest.raises(N.NoteError, match="too many"):
+        N.open_note(N.sign_note("t\n", [log] + others), [log.verifier])
+
+
+@pytest.mark.parametrize("line", [
+    "— bad+name.example/w AAAAAAAAAAAAAAAAAAAAAA==\n",     # '+' in a key name
+    "— bad name.example/w AAAAAAAAAAAAAAAAAAAAAA==\n",  # a Unicode space
+    "—  AAAAAAAAAAAAAAAAAAAAAA==\n",                        # empty name
+    "— w.example/w AAAA\n",                                 # under 5 bytes
+])
+def test_unknown_key_lines_must_still_be_well_formed(line):
+    """Unknown keys are ignored, but every line must have the signed-note shape:
+    Go's note.Open rejects these too (errMalformedNote)."""
+    s = N.Signer.generate(ORIGIN)
+    with pytest.raises(N.NoteError):
+        N.open_note(N.sign_note("t\n", [s]) + line.encode(), [s.verifier])

@@ -22,7 +22,7 @@ pytest.importorskip("nacl.signing")
 from szl_khipu_scholar.tlog import merkle  # noqa: E402
 from szl_khipu_scholar.tlog.checkpoint import open_checkpoint  # noqa: E402
 from szl_khipu_scholar.tlog.log import TileLog  # noqa: E402
-from szl_khipu_scholar.tlog.note import Signer, Verifier  # noqa: E402
+from szl_khipu_scholar.tlog.note import Signer, Verifier, open_note  # noqa: E402
 from szl_khipu_scholar.tlog.tiles import DirTileStore, TileReader  # noqa: E402
 
 GO_DIR = Path(__file__).parent / "interop" / "go"
@@ -36,6 +36,7 @@ GO_TESTS = [
     "TestTesseraClientFileFetcher",
     "TestTesseraClientHTTPFetcher",
     "TestGoSignedCheckpointForPython",
+    "TestGoSignedEdgeNotesForPython",
 ]
 
 
@@ -131,3 +132,14 @@ def test_python_accepts_checkpoint_signed_by_go(built, go_run):
     # the Go signature is not accepted under the Python log's key
     with pytest.raises(Exception):
         open_checkpoint(msg, [built["signer"].verifier])
+
+
+def test_python_accepts_notes_go_signs_at_the_spec_edges(built, go_run):
+    assert go_run.returncode == 0
+    out = built["out"]
+    v = Verifier.from_vkey((out / "go_del_vkey.txt").read_text("utf-8").strip())
+    assert v.name == "go.example/del\x7fkey"
+    assert open_note((out / "go_del_note.txt").read_bytes(), [v]).text == "hello\x7fworld\n"
+    log = Verifier.from_vkey((out / "go_unknown_twice_vkey.txt").read_text("utf-8").strip())
+    opened = open_note((out / "go_unknown_twice_note.txt").read_bytes(), [log])
+    assert [x.name for x in opened.verified] == ["go.example/notes"] and len(opened.unknown) == 2

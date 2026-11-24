@@ -15,8 +15,12 @@ import base64
 from dataclasses import dataclass
 from typing import Iterable, Sequence, Tuple
 
+from .merkle import empty_root
 from .note import (NoteError, OpenedNote, Signer, Verifier, b64decode_canonical,
                    open_note, sign_note)
+
+
+MAX_TREE_SIZE = 2**64 - 1   # a uint64, as Go's formats/log parses it
 
 
 class CheckpointError(NoteError):
@@ -35,6 +39,8 @@ class Checkpoint:
             raise CheckpointError("origin must be a non-empty single line")
         if self.size < 0:
             raise CheckpointError("negative tree size")
+        if self.size > MAX_TREE_SIZE:
+            raise CheckpointError("tree size does not fit in a uint64")
         if len(self.root) != 32:
             raise CheckpointError("root hash must be 32 bytes")
         for e in self.extensions:
@@ -55,7 +61,9 @@ class Checkpoint:
             raise CheckpointError("need at least three non-empty lines")
         origin, size_s, root_s, *ext = lines
         if not (size_s.isascii() and size_s.isdigit()) or (len(size_s) > 1 and size_s[0] == "0"):
-            raise CheckpointError("tree size must be an ASCII decimal with no leading zeros")
+            raise CheckpointError("tree size must be a canonical ASCII decimal (no zero prefix)")
+        if len(size_s) > len(str(MAX_TREE_SIZE)):      # before int(), which caps digit counts
+            raise CheckpointError("tree size does not fit in a uint64")
         try:
             root = b64decode_canonical(root_s)
         except NoteError as e:
@@ -71,15 +79,20 @@ def sign_checkpoint(cp: Checkpoint, signers: Sequence[Signer]) -> bytes:
 
 def open_checkpoint(msg: bytes, known: Iterable[Verifier],
                     origin: str | None = None) -> Tuple[Checkpoint, OpenedNote]:
-    """Verify a signed checkpoint. When `origin` is given the checkpoint must be
-    for exactly that log, and the log's own key (name == origin) must have
-    signed it."""
+    """Verify a signed checkpoint. The log's own key (name == the checkpoint's
+    origin line) must have signed it, on every call: a signature from any other
+    known key (a witness, another log) is a cosignature and never stands in
+    for the log's. When `origin` is given the checkpoint must also be for
+    exactly that log; without it, the caller must check `cp.origin`."""
     known = list(known)
     opened = open_note(msg, known)
     cp = Checkpoint.parse(opened.text)
-    if origin is not None:
-        if cp.origin != origin:
-            raise CheckpointError("checkpoint is for a different origin")
-        if not any(v.name == origin for v in opened.verified):
-            raise CheckpointError("checkpoint is not signed by the log's own key")
+    if origin is not None and cp.origin != origin:
+        raise CheckpointError("checkpoint is for a different origin")
+    if not any(v.name == cp.origin for v in opened.verified):
+        raise CheckpointError("checkpoint is not signed by the log's own key")
+    if len(set(opened.unknown)) != len(opened.unknown):
+        raise CheckpointError("more than one signature line with the same key name and id")
+    if cp.size == 0 and cp.root != empty_root():
+        raise CheckpointError("a size-0 checkpoint must carry the empty-tree root")
     return cp, opened
