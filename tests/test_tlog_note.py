@@ -37,6 +37,8 @@ def test_spec_example_tamper_and_wrong_key_rejected():
 
 def test_vkey_must_be_self_consistent():
     s = N.Signer.generate("log.example/x")
+    while s.verifier.key_id.hex().isdigit():    # ~2% of key ids have no a-f: upper() would not change them
+        s = N.Signer.generate("log.example/x")
     assert N.Verifier.from_vkey(s.verifier.vkey()) == s.verifier
     name, kid, blob = s.verifier.vkey().split("+", 2)
     for bad in (f"{name}+00000000+{blob}", f"{name}+{kid.upper()}+{blob}", f"{name}+{kid}",
