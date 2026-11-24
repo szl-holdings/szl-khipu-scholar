@@ -136,3 +136,14 @@ def test_boundary_arguments():
     with pytest.raises(ValueError):
         merkle.consistency_proof(node, 5, 4)
     assert merkle.inclusion_proof(build(1), 0, 1) == []
+
+
+def test_size_zero_consistency_needs_the_empty_tree_root():
+    """C2SP tlog-witness: a size-0 checkpoint has the empty-tree root. The
+    equal-size shortcut must not skip that rule for size1 == size2 == 0."""
+    empty, bogus = merkle.empty_root(), b"\x11" * 32
+    merkle.verify_consistency(0, 0, [], empty, empty)
+    with pytest.raises(ProofError, match="empty-tree hash"):
+        merkle.verify_consistency(0, 0, [], bogus, bogus)
+    with pytest.raises(ProofError, match="different roots"):
+        merkle.verify_consistency(0, 0, [], empty, bogus)

@@ -15,6 +15,7 @@ import base64
 from dataclasses import dataclass
 from typing import Iterable, Sequence, Tuple
 
+from .merkle import empty_root
 from .note import (NoteError, OpenedNote, Signer, Verifier, b64decode_canonical,
                    open_note, sign_note)
 
@@ -83,4 +84,6 @@ def open_checkpoint(msg: bytes, known: Iterable[Verifier],
         raise CheckpointError("checkpoint is for a different origin")
     if not any(v.name == cp.origin for v in opened.verified):
         raise CheckpointError("checkpoint is not signed by the log's own key")
+    if cp.size == 0 and cp.root != empty_root():
+        raise CheckpointError("a size-0 checkpoint must carry the empty-tree root")
     return cp, opened

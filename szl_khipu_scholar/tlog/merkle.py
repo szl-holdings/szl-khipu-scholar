@@ -151,17 +151,19 @@ def verify_consistency(size1: int, size2: int, proof: Sequence[bytes],
     if size1 < 0 or size2 < size1:
         raise ProofError("need 0 <= size1 <= size2")
     _check_hashes(proof)
+    if size1 == 0:                     # before the equal-size case, so 0 -> 0 is covered
+        if proof:
+            raise ProofError("an empty tree takes an empty proof")
+        if bytes(root1) != empty_root():
+            raise ProofError("size 0 root is not the empty-tree hash")
+        if size2 == 0 and bytes(root2) != bytes(root1):
+            raise ProofError("same size, different roots")
+        return
     if size1 == size2:
         if proof:
             raise ProofError("equal sizes take an empty proof")
         if bytes(root1) != bytes(root2):
             raise ProofError("same size, different roots")
-        return
-    if size1 == 0:
-        if proof:
-            raise ProofError("an empty tree takes an empty proof")
-        if bytes(root1) != empty_root():
-            raise ProofError("size 0 root is not the empty-tree hash")
         return
     path = list(proof)
     if size1 & (size1 - 1) == 0:       # size1 is a power of two: root1 is the seed

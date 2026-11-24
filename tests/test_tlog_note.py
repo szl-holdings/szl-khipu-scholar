@@ -177,3 +177,15 @@ def test_default_open_checkpoint_requires_the_origins_own_key():
     cp, opened = open_checkpoint(sign_checkpoint(cp_a, [a, wit]), known)
     assert cp == cp_a
     assert [v.name for v in opened.verified] == ["example.com/logA", "witness.example/w1"]
+
+
+def test_size_zero_checkpoint_must_carry_the_empty_tree_root():
+    import hashlib
+    log = N.Signer.generate(ORIGIN)
+    empty = hashlib.sha256(b"").digest()
+    cp, _ = open_checkpoint(sign_checkpoint(Checkpoint(ORIGIN, 0, empty), [log]),
+                            [log.verifier], origin=ORIGIN)
+    assert (cp.size, cp.root) == (0, empty)
+    with pytest.raises(CheckpointError, match="empty-tree root"):
+        open_checkpoint(sign_checkpoint(Checkpoint(ORIGIN, 0, ROOT), [log]),
+                        [log.verifier], origin=ORIGIN)
