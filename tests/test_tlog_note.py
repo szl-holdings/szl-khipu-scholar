@@ -218,3 +218,19 @@ def test_repeated_unknown_key_lines_are_ignored_by_notes_but_not_by_checkpoints(
         open_checkpoint(doubled, [log.verifier], origin=ORIGIN)   # tlog-checkpoint: MUST NOT repeat
     with pytest.raises(N.NoteError, match="duplicate"):
         N.open_note(doubled, [log.verifier, wit.verifier])    # a repeated known key still rejects
+
+
+def test_tree_size_must_fit_in_a_uint64():
+    """Go's formats/log parses the size as a uint64. A size that does not fit,
+    or one too long for int() to convert, is a CheckpointError, not a crash."""
+    root64 = base64.b64encode(ROOT).decode()
+    assert Checkpoint.parse(f"o\n18446744073709551615\n{root64}\n").size == 2**64 - 1
+    for size in ("18446744073709551616", "9" * 21, "1" + "0" * 5000):
+        with pytest.raises(CheckpointError, match="uint64"):
+            Checkpoint.parse(f"o\n{size}\n{root64}\n")
+    with pytest.raises(CheckpointError, match="uint64"):
+        Checkpoint("o", 2**64, ROOT)
+    log = N.Signer.generate(ORIGIN)
+    huge = N.sign_note(f"{ORIGIN}\n1{'0' * 5000}\n{root64}\n", [log])
+    with pytest.raises(CheckpointError, match="uint64"):
+        open_checkpoint(huge, [log.verifier], origin=ORIGIN)

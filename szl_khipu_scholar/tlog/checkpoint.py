@@ -20,6 +20,9 @@ from .note import (NoteError, OpenedNote, Signer, Verifier, b64decode_canonical,
                    open_note, sign_note)
 
 
+MAX_TREE_SIZE = 2**64 - 1   # a uint64, as Go's formats/log parses it
+
+
 class CheckpointError(NoteError):
     """The checkpoint text is malformed or its signature is not acceptable."""
 
@@ -36,6 +39,8 @@ class Checkpoint:
             raise CheckpointError("origin must be a non-empty single line")
         if self.size < 0:
             raise CheckpointError("negative tree size")
+        if self.size > MAX_TREE_SIZE:
+            raise CheckpointError("tree size does not fit in a uint64")
         if len(self.root) != 32:
             raise CheckpointError("root hash must be 32 bytes")
         for e in self.extensions:
@@ -57,6 +62,8 @@ class Checkpoint:
         origin, size_s, root_s, *ext = lines
         if not (size_s.isascii() and size_s.isdigit()) or (len(size_s) > 1 and size_s[0] == "0"):
             raise CheckpointError("tree size must be a canonical ASCII decimal (no zero prefix)")
+        if len(size_s) > len(str(MAX_TREE_SIZE)):      # before int(), which caps digit counts
+            raise CheckpointError("tree size does not fit in a uint64")
         try:
             root = b64decode_canonical(root_s)
         except NoteError as e:
