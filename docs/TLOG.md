@@ -18,8 +18,9 @@ change what a receipt means, and being in the log does not make a receipt
 
 Not implemented: timestamped cosignatures (types `0x04`, `0x06`), witnessing
 (`c2sp.org/tlog-witness`), pruning / minimum index, HTTP serving. The writer is
-single-process and keeps the tree in memory; it is a reference writer, not a
-production sequencer.
+single-process and keeps the tree in memory (after a restart, `TileLog.resume`
+rebuilds it from the entry bundles); it is a reference writer, not a production
+sequencer. `DirTileStore` needs a POSIX system (directory file descriptors).
 
 ## Use
 
@@ -27,19 +28,57 @@ production sequencer.
 from szl_khipu_scholar.tlog import DirTileStore, Signer, TileLog, TileReader, open_checkpoint
 
 signer = Signer.generate("example.com/receipts")      # or Signer(name, seed) with a key you hold
-log = TileLog(DirTileStore("out"), "example.com/receipts", signer)
+state = "/var/lib/receipts-log.state"                  # outside the served directory "out"
+log = TileLog(DirTileStore("out"), "example.com/receipts", signer, state_path=state)
 index = log.append(receipt_bytes)                      # exactly the bytes that were signed
-checkpoint = log.publish()                             # writes tiles first, then `checkpoint`
+checkpoint = log.publish()                             # tiles, then the state record, then `checkpoint`
+
+# after a restart: rebuild from the entry bundles of the last signed checkpoint
+log = TileLog.resume(DirTileStore("out"), "example.com/receipts", signer, state_path=state)
 
 cp, _ = open_checkpoint(checkpoint, [signer.verifier], origin="example.com/receipts")
-reader = TileReader(DirTileStore("out"), cp.size)
-assert reader.root() == cp.root
-reader.audit()                                         # every tile agrees with the tile above it
+reader = TileReader(DirTileStore("out"), cp.size, cp.root)   # pinned to the verified root
+reader.audit()                                         # every full tile agrees with the tile above it
 proof = reader.inclusion_proof(index)
 ```
 
+`open_checkpoint` always requires a signature from the key named by the
+checkpoint's own origin line; other known keys (witnesses, other logs) only
+cosign. Pass `origin=` to pin the log as well. Without a pinned root,
+`TileReader` still checks every full tile against the tile above it, but the
+caller must compare `reader.root()` with the checkpoint before trusting answers.
+
 Keys are supplied by the caller. This code never writes a key anywhere, and the
 tests generate throwaway keys at test time.
+
+## What the writer and readers refuse
+
+Each rule below has a test in `tests/test_tlog_*.py` that fails if the rule is
+removed (checked by mutating the code on a scratch copy).
+
+* **No fork, no rollback.** `publish` raises `LogStateError` unless the new tree
+  extends, by a verified consistency proof, the checkpoint served in the store
+  (verified under the log key), the last one this object published, and the one
+  recorded in `state_path`. The record is written durably before the signature
+  exists. Keep it outside the served directory: whoever can write that directory
+  can roll `checkpoint` back, but not the record. Without a state file a writer
+  restarted on a rolled-back directory cannot know what it signed.
+* **Interrupted publish.** Tiles left beyond the largest signed size by a publish
+  that died are replaced on the next publish when a state file exists; without
+  one they stay immutable and the writer refuses. Crash ordering is exercised by
+  tests that record the order of writes and fsyncs; behaviour under real power
+  loss is MODELED, not tested.
+* **No writes outside the directory.** `DirTileStore` never opens a symlink below
+  its root, writes through an exclusive temp file, and fsyncs file and directory.
+* **Readers bound to the root.** See `TileReader` above.
+* **Checkpoint parsing** follows c2sp.org/signed-note and tlog-checkpoint: only
+  characters below U+0020 are control characters (U+007F is allowed), lines from
+  unknown keys are ignored but may not repeat in a checkpoint, a size-0
+  checkpoint must carry SHA-256 of the empty string, and sizes must fit in a uint64.
+* **Proofs.** `verify_inclusion` and `verify_consistency` are checked against a
+  recursive reference written from the RFC 6962 definitions, on honest proofs
+  claimed for other indexes and sizes and on truncated, extended, swapped and
+  bit-flipped ones.
 
 ## Tests
 
@@ -61,5 +100,7 @@ levels 0 to 2) with throwaway keys, then has independent Go implementations chec
 * `github.com/transparency-dev/tessera/client` (a tlog-tiles client) fetches the checkpoint,
   builds proofs and reads entry bundles, from a directory and over HTTP (local test server).
 * Go signs a checkpoint with its own throwaway key; Python accepts it.
+* Go signs notes at the edges of the signed-note spec (U+007F in the text and in the
+  key name, a repeated line from a key Python does not know); Python accepts them.
 
 `TLOG_REQUIRE_GO=1` turns a missing Go toolchain from a skip into a failure.
