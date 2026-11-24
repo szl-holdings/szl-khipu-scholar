@@ -189,3 +189,32 @@ def test_size_zero_checkpoint_must_carry_the_empty_tree_root():
     with pytest.raises(CheckpointError, match="empty-tree root"):
         open_checkpoint(sign_checkpoint(Checkpoint(ORIGIN, 0, ROOT), [log]),
                         [log.verifier], origin=ORIGIN)
+
+
+def test_del_is_not_a_control_character_in_signed_notes():
+    """c2sp.org/signed-note: control characters are those below U+0020 (newline
+    allowed); key names exclude only Unicode spaces and '+'. U+007F is neither."""
+    s = N.Signer.generate("del\x7fname.example/log")
+    assert N.Verifier.from_vkey(s.verifier.vkey()) == s.verifier
+    msg = N.sign_note("hello\x7fworld\n", [s])
+    assert N.open_note(msg, [s.verifier]).text == "hello\x7fworld\n"
+    known = N.Signer.generate(ORIGIN)
+    with_unknown = N.sign_note("t\n", [known, s])            # an unknown line whose name has U+007F
+    opened = N.open_note(with_unknown, [known.verifier])
+    assert [v.name for v in opened.verified] == [ORIGIN] and len(opened.unknown) == 1
+    for bad in ("tab\x09name", "nul\x00name", "esc\x1bname"):
+        with pytest.raises(N.NoteError):
+            N.Signer.generate(bad)
+
+
+def test_repeated_unknown_key_lines_are_ignored_by_notes_but_not_by_checkpoints():
+    log, wit = N.Signer.generate(ORIGIN), N.Signer.generate("witness.example/w")
+    msg = sign_checkpoint(Checkpoint(ORIGIN, 5, ROOT), [log, wit]).decode()
+    wit_line = msg.rstrip("\n").split("\n")[-1] + "\n"
+    doubled = (msg + wit_line).encode()
+    opened = N.open_note(doubled, [log.verifier])            # signed-note: unknown keys are ignored
+    assert [v.name for v in opened.verified] == [ORIGIN] and len(opened.unknown) == 2
+    with pytest.raises(CheckpointError, match="same key name and id"):
+        open_checkpoint(doubled, [log.verifier], origin=ORIGIN)   # tlog-checkpoint: MUST NOT repeat
+    with pytest.raises(N.NoteError, match="duplicate"):
+        N.open_note(doubled, [log.verifier, wit.verifier])    # a repeated known key still rejects

@@ -497,3 +497,64 @@ func TestGoSignedCheckpointForPython(t *testing.T) {
 		t.Fatalf("spec example note: %v", err)
 	}
 }
+
+//  7. Go signs notes at the edges of c2sp.org/signed-note that Python must
+//     accept: U+007F in the text and in the key name (control characters
+//     there are only those below U+0020), and a cosignature line from a key
+//     Python does not know, repeated (verifiers must ignore unknown keys).
+func TestGoSignedEdgeNotesForPython(t *testing.T) {
+	f := load(t)
+	if f.Out == "" {
+		t.Skip("no output dir")
+	}
+	signer := func(name string) (note.Signer, string) {
+		skey, vkey, err := note.GenerateKey(nil, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := note.NewSigner(skey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s, vkey
+	}
+	write := func(name string, data []byte) {
+		if err := os.WriteFile(filepath.Join(f.Out, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	open := func(msg []byte, vkey string) *note.Note {
+		v, err := note.NewVerifier(vkey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := note.Open(msg, note.VerifierList(v))
+		if err != nil {
+			t.Fatalf("Go rejects its own note: %v", err)
+		}
+		return n
+	}
+
+	del, delV := signer("go.example/del\x7fkey")
+	delMsg, err := note.Sign(&note.Note{Text: "hello\x7fworld\n"}, del)
+	if err != nil {
+		t.Fatal(err)
+	}
+	open(delMsg, delV)
+	write("go_del_note.txt", delMsg)
+	write("go_del_vkey.txt", []byte(delV))
+
+	logS, logV := signer("go.example/notes")
+	wit, _ := signer("go.example/witness")
+	two, err := note.Sign(&note.Note{Text: "cosigned\n"}, logS, wit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.SplitAfter(string(two), "\n")
+	doubled := []byte(string(two) + lines[len(lines)-2])
+	if n := open(doubled, logV); len(n.Sigs) != 1 || len(n.UnverifiedSigs) != 1 {
+		t.Fatalf("sigs=%d unverified=%d", len(n.Sigs), len(n.UnverifiedSigs))
+	}
+	write("go_unknown_twice_note.txt", doubled)
+	write("go_unknown_twice_vkey.txt", []byte(logV))
+}

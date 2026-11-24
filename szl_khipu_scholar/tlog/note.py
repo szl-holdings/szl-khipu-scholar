@@ -47,7 +47,7 @@ def b64decode_canonical(text: str) -> bytes:
 def _check_name(name: str) -> None:
     if not name or "+" in name or any(c.isspace() for c in name):
         raise NoteError("key name must be non-empty with no spaces or plus signs")
-    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in name):
+    if any(ord(c) < 0x20 for c in name):       # the spec's control characters: below U+0020
         raise NoteError("key name contains a control character")
 
 
@@ -131,7 +131,7 @@ def _check_text(text: str) -> None:
     if not text.endswith("\n"):
         raise NoteError("note text must end in a newline")
     for c in text:
-        if c != "\n" and (ord(c) < 0x20 or ord(c) == 0x7F):
+        if c != "\n" and ord(c) < 0x20:
             raise NoteError("note contains a control character")
 
 
@@ -196,13 +196,13 @@ def open_note(msg: bytes, known: Iterable[Verifier]) -> OpenedNote:
         if len(raw) < 5:
             raise NoteError("signature too short")
         kid, sig = raw[:4], raw[4:]
+        v = pinned.get((name, kid))
+        if v is None:
+            unknown.append((name, kid))    # ignored, repeats included (open_checkpoint checks)
+            continue
         if (name, kid) in seen:
             raise NoteError("duplicate signature for the same key name and id")
         seen.add((name, kid))
-        v = pinned.get((name, kid))
-        if v is None:
-            unknown.append((name, kid))
-            continue
         if not v.verify(data, sig):
             raise NoteError(f"signature from known key {name!r} does not verify")
         verified.append(v)

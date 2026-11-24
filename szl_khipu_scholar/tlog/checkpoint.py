@@ -84,6 +84,8 @@ def open_checkpoint(msg: bytes, known: Iterable[Verifier],
         raise CheckpointError("checkpoint is for a different origin")
     if not any(v.name == cp.origin for v in opened.verified):
         raise CheckpointError("checkpoint is not signed by the log's own key")
+    if len(set(opened.unknown)) != len(opened.unknown):
+        raise CheckpointError("more than one signature line with the same key name and id")
     if cp.size == 0 and cp.root != empty_root():
         raise CheckpointError("a size-0 checkpoint must carry the empty-tree root")
     return cp, opened
