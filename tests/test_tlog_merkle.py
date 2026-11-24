@@ -161,6 +161,14 @@ def test_inclusion_proof_borrowed_from_another_index_is_shorter_than_the_path():
         merkle.verify_inclusion(3, 7, node(0, 6), proof6, root)  # entry 6 claimed at index 3
 
 
+def test_inclusion_proof_longer_than_the_path_is_refused():
+    # A size-1 tree has an empty path, so any extra element must be refused.
+    # Without the guard, [x] folds y into H(x, y) and a forged root verifies.
+    x, y = merkle.hash_leaf(b"x"), merkle.hash_leaf(b"y")
+    with pytest.raises(ProofError, match="longer than the path"):
+        merkle.verify_inclusion(0, 1, y, [x], merkle.hash_children(x, y))
+
+
 def test_consistency_proof_for_a_smaller_tree_is_shorter_than_the_path():
     node = build(16)
     r = lambda n: merkle.tree_hash(node, n)

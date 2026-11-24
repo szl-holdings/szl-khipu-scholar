@@ -53,8 +53,11 @@ tests generate throwaway keys at test time.
 
 ## What the writer and readers refuse
 
-Each rule below has a test in `tests/test_tlog_*.py` that fails if the rule is
-removed (checked by mutating the code on a scratch copy).
+Each rule below has tests in `tests/test_tlog_*.py`. On 2026-11-24 the rules
+were removed one at a time on a scratch copy, and most removals fail a test.
+Some do not yet: the fsync of the state record and of its directory, and the
+state file's origin and location checks. Their behaviour is unchanged; only
+the test that would catch their removal is missing.
 
 * **No fork, no rollback.** `publish` raises `LogStateError` unless the new tree
   extends, by a verified consistency proof, the checkpoint served in the store
