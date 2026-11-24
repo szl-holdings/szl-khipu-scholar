@@ -161,3 +161,19 @@ def test_open_checkpoint_pins_origin_and_log_key():
     only_wit = sign_checkpoint(Checkpoint(ORIGIN, 5, ROOT), [wit])
     with pytest.raises(CheckpointError, match="log's own key"):
         open_checkpoint(only_wit, [wit.verifier], origin=ORIGIN)
+
+
+def test_default_open_checkpoint_requires_the_origins_own_key():
+    """Without `origin`, a checkpoint is still accepted only when the key named
+    by its own origin line signed it. Another log's key or a witness key that
+    the client also trusts is a cosigner, never the log signature."""
+    a, b = N.Signer.generate("example.com/logA"), N.Signer.generate("example.com/logB")
+    wit = N.Signer.generate("witness.example/w1")
+    known = [a.verifier, b.verifier, wit.verifier]
+    cp_a = Checkpoint("example.com/logA", 1, ROOT)
+    for signers in ([b], [wit], [b, wit]):
+        with pytest.raises(CheckpointError, match="log's own key"):
+            open_checkpoint(sign_checkpoint(cp_a, signers), known)
+    cp, opened = open_checkpoint(sign_checkpoint(cp_a, [a, wit]), known)
+    assert cp == cp_a
+    assert [v.name for v in opened.verified] == ["example.com/logA", "witness.example/w1"]

@@ -71,15 +71,16 @@ def sign_checkpoint(cp: Checkpoint, signers: Sequence[Signer]) -> bytes:
 
 def open_checkpoint(msg: bytes, known: Iterable[Verifier],
                     origin: str | None = None) -> Tuple[Checkpoint, OpenedNote]:
-    """Verify a signed checkpoint. When `origin` is given the checkpoint must be
-    for exactly that log, and the log's own key (name == origin) must have
-    signed it."""
+    """Verify a signed checkpoint. The log's own key (name == the checkpoint's
+    origin line) must have signed it, on every call: a signature from any other
+    known key (a witness, another log) is a cosignature and never stands in
+    for the log's. When `origin` is given the checkpoint must also be for
+    exactly that log; without it, the caller must check `cp.origin`."""
     known = list(known)
     opened = open_note(msg, known)
     cp = Checkpoint.parse(opened.text)
-    if origin is not None:
-        if cp.origin != origin:
-            raise CheckpointError("checkpoint is for a different origin")
-        if not any(v.name == origin for v in opened.verified):
-            raise CheckpointError("checkpoint is not signed by the log's own key")
+    if origin is not None and cp.origin != origin:
+        raise CheckpointError("checkpoint is for a different origin")
+    if not any(v.name == cp.origin for v in opened.verified):
+        raise CheckpointError("checkpoint is not signed by the log's own key")
     return cp, opened
