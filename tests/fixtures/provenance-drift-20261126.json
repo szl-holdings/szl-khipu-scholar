@@ -1,0 +1,125 @@
+{
+  "schema": "szl.provenance_drift_ledger.fixture.v1",
+  "rows": [
+    {
+      "asset": "SZLHOLDINGS/brain-navigator-r2",
+      "surface": "hf_model",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "4f6958469afcbb36124b194441ac398a722d36ef",
+      "observed_at": "2026-11-26T22:13:04.360076+00:00",
+      "comparison": "CONFLICT",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Canonical post-publication gate FAIL not visible on the audited README; eval_report.json is shown as PASS.",
+      "evidence": [
+        "canonical/frontier/evaluation/gate_runs/brain-navigator-r2_ad510c4b0542_20260915T040842Z_receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/brain-navigator-r2",
+      "surface": "hf_model",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "a545dce97ad9ec4e9d55e194384d22338f129b80",
+      "observed_at": "2026-11-27T00:11:40+00:00",
+      "comparison": "DRIFT",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Hub main moved after the audit; README replaced by a short harvest stub without license or gate FAIL disclosure. model_receipt.json added. Evidence files from the audit still present.",
+      "evidence": [
+        "README.md",
+        "model_receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/chaski-r2",
+      "surface": "hf_model",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "929711f7776d69a63fba2654c6437a71597126f7",
+      "observed_at": "2026-11-26T22:13:04.977239+00:00",
+      "comparison": "CONFLICT",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Canonical post-publication gate FAIL not visible; README highlights eval_named_n_generate.json as PASS.",
+      "evidence": [
+        "canonical/frontier/evaluation/gate_runs/chaski-r2_4ef29684c56d_20260915T093042Z_receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/khipu-r3",
+      "surface": "hf_model",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "8ac554d78785d7e868c686790d91492f2770a015",
+      "observed_at": "2026-11-26T22:13:06.294798+00:00",
+      "comparison": "CONFLICT",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Canonical post-publication gate FAIL not disclosed in the required phrasing; a later exact-bytes eval FAIL is listed but does not satisfy the inventory pattern.",
+      "evidence": [
+        "canonical/frontier/evaluation/gate_runs/khipu-r3_89807a2680e2_20260915T040737Z_receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/chaski-r4",
+      "surface": "hf_model",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "cfab2b59d092a38b80fa03b3881ddb5e755038f5",
+      "observed_at": "2026-11-27T02:04:00+00:00",
+      "comparison": "MATCH",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Audit PASS at this revision; live Hub sha and file list still match the artifact snapshot.",
+      "evidence": [
+        "evidence/canonical_rerun_20261001_140615.receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/SZL-Khipu-1.5B",
+      "surface": "hf_model",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "5c2c3bc1b96dbb7a6aeb910c8cc041bae933397c",
+      "observed_at": "2026-11-27T00:11:47+00:00",
+      "comparison": "DRIFT",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Audit PASS was at 81991991aca02f861e95971f545678f74b2859c5. Live main later replaced the card with a short harvest stub and added adapter files plus model_receipt.json. Inventory evidence files still present. Not used as the pilot while drifted.",
+      "evidence": [
+        "README.md",
+        "model_receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/szl-frontier-evaluation-receipts",
+      "surface": "hf_dataset",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "b66bd40f41616423a609bdd3578f5f65bb88113d",
+      "artifact_rev": "19e31ee63d82cf6a5f186f23267a35aeedde6e94",
+      "observed_at": "2026-11-26T23:14:50+00:00",
+      "comparison": "DRIFT",
+      "label": "MEASURED",
+      "audit_run": "45903315277",
+      "notes": "Audit PASS was at 903e3e31cd92e058321b439c29fdf6a90cd40cb0. Live main added holo/card assets; configured evidence files still present.",
+      "evidence": [
+        "runs/2026/09/20/github-35494755227-1-7a5b1d428631/glm-5-3-flash/receipt.json"
+      ]
+    },
+    {
+      "asset": "SZLHOLDINGS/szl-model-inference-lab",
+      "surface": "hf_space",
+      "source_repo": "szl-holdings/szl-forge",
+      "source_rev": "UNKNOWN",
+      "artifact_rev": "0605631792969840f0e991089964c6e814f2a763",
+      "observed_at": "2026-11-26T23:30:57+00:00",
+      "comparison": "UNKNOWN",
+      "label": "MEASURED",
+      "audit_run": null,
+      "notes": "Proposed pilot Space. Metadata read only; runtime stage not probed (no cold-wake). Binding to chaski-r4 is planned, not applied.",
+      "evidence": []
+    }
+  ]
+}
